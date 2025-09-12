@@ -6,14 +6,11 @@
   <style>
     body { font-family: sans-serif; padding: 20px; max-width: 900px; margin: auto; }
     h1 { text-align: center; }
-
     .xp-bar { margin: 20px 0; }
     .progress-bar { height: 25px; background: #eee; border-radius: 12px; overflow: hidden; }
     .progress-bar-inner { height: 100%; background: linear-gradient(90deg, #4caf50, #81c784); width: 0%; transition: width 0.5s; }
-
     .goal { margin-bottom: 20px; padding: 10px; border: 1px solid #ccc; border-radius: 5px; }
     .badge { display: inline-block; margin: 5px; padding: 6px 10px; background: gold; border-radius: 12px; font-weight: bold; }
-
     .heatmap { display: grid; grid-template-columns: repeat(7, 20px); gap: 3px; margin-top: 10px; }
     .day { width: 20px; height: 20px; background: #eee; border-radius: 3px; }
     .day[data-count="1"] { background: #c8e6c9; }
@@ -21,7 +18,6 @@
     .day[data-count="3"] { background: #4caf50; }
     .day[data-count="4"] { background: #2e7d32; }
     .day[data-count="5"] { background: #1b5e20; }
-
     #settings { display:none; border:1px solid #aaa; padding:15px; margin-top:20px; border-radius:8px; background:#fafafa; }
   </style>
 </head>
@@ -60,13 +56,12 @@
     <button id="close-settings">Close</button>
   </div>
 
-  <!-- Firebase + App -->
+  <!-- Script -->
   <script type="module">
-    // --- Firebase Imports ---
+    // --- Firebase ---
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
     import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
-    // --- Deine Firebase Config ---
     const firebaseConfig = {
       apiKey: "DEIN_API_KEY",
       authDomain: "DEIN_PROJEKT.firebaseapp.com",
@@ -75,14 +70,12 @@
       messagingSenderId: "DEINE_SENDER_ID",
       appId: "DEINE_APP_ID"
     };
-
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    // --- Globale Variablen ---
+    // --- Variablen ---
     const STORAGE_KEY = "ambition-tracker-users";
     const XP_PER_LEVEL = 10;
-
     let users = {};
     let currentUser = null;
 
@@ -97,26 +90,17 @@
 
     // --- Firestore ---
     async function loadUserFromCloud(username) {
-      try {
-        const ref = doc(db, "users", username);
-        const snap = await getDoc(ref);
-        if (snap.exists()) {
-          users[username] = snap.data();
-          saveLocalUsers();
-          console.log("✅ Daten aus Cloud geladen:", username);
-        }
-      } catch (err) {
-        console.warn("⚠️ Cloud-Laden fehlgeschlagen:", err);
+      const ref = doc(db, "users", username);
+      const snap = await getDoc(ref);
+      if (snap.exists()) {
+        users[username] = snap.data();
+        saveLocalUsers();
+        console.log("☁️ Daten aus Cloud geladen:", username);
       }
     }
     async function saveUserToCloud(username) {
-      try {
-        const ref = doc(db, "users", username);
-        await setDoc(ref, users[username]);
-        console.log("☁️ Daten hochgeladen:", username);
-      } catch (err) {
-        console.warn("⚠️ Cloud-Speichern fehlgeschlagen:", err);
-      }
+      const ref = doc(db, "users", username);
+      await setDoc(ref, users[username]);
     }
 
     // --- User Daten ---
@@ -154,7 +138,6 @@
 
       let multiplier = data.streak >= 5 ? 2 : 1;
       data.totalXP += amount * multiplier;
-
       data.activityLog[today] = (data.activityLog[today] || 0) + amount;
 
       const newLevel = Math.floor(data.totalXP / XP_PER_LEVEL) + 1;
@@ -164,7 +147,6 @@
         alert(`🎉 Level ${newLevel} erreicht!`);
       }
     }
-
     function applyDecay(goal) {
       if (!goal.lastUpdate) return;
       const today = new Date().toISOString().split("T")[0];
@@ -182,11 +164,9 @@
       document.getElementById("xp-bar-inner").style.width = percent + "%";
       document.getElementById("xp-info").innerText = `XP: ${xpInLevel} / ${XP_PER_LEVEL} (Level ${data.currentLevel})`;
       document.getElementById("streak-info").innerText = `🔥 Streak: ${data.streak} Tage`;
-      document.getElementById("rewards").innerHTML =
-        data.rewards.map(r => `<span class="badge">🏆 ${r}</span>`).join(" ");
+      document.getElementById("rewards").innerHTML = data.rewards.map(r => `<span class="badge">🏆 ${r}</span>`).join(" ");
       document.body.style.backgroundColor = data.settings.bgColor;
     }
-
     function renderGoals() {
       const data = getUserData(currentUser);
       const dash = document.getElementById("dashboard");
@@ -206,7 +186,6 @@
         dash.appendChild(div);
       });
     }
-
     function renderHeatmap() {
       const data = getUserData(currentUser);
       const heatmap = document.getElementById("heatmap");
@@ -223,7 +202,6 @@
         heatmap.appendChild(div);
       }
     }
-
     function renderUserSelect() {
       const select = document.getElementById("user-select");
       select.innerHTML = "";
@@ -246,7 +224,6 @@
       saveLocalUsers();
       await saveUserToCloud(currentUser);
     }
-
     document.getElementById("add-goal").addEventListener("click",()=>{
       const data=getUserData(currentUser);
       const name=prompt("Goal name:");
@@ -274,7 +251,8 @@
     document.getElementById("reset-user").addEventListener("click",()=>{
       if(confirm("Reset progress for this user?")){
         users[currentUser]=createDefaultUser(currentUser);
-        saveLocalUsers(); saveUserToCloud(currentUser); renderGoals(); renderXP(); renderHeatmap();
+        saveLocalUsers(); saveUserToCloud(currentUser);
+        renderGoals(); renderXP(); renderHeatmap();
       }
     });
 
@@ -305,107 +283,6 @@
       });
     }
     init();
-  </script>
-</body>
-</html>
-
-
-<!-- Firebase SDKs -->
-<script type="module">
-  // Firebase importieren
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-  import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
-
-  // ⬇️ HIER deine Config einfügen
-  const firebaseConfig = {
-    apiKey: "DEIN_API_KEY",
-    authDomain: "DEIN_PROJEKT.firebaseapp.com",
-    projectId: "DEIN_PROJEKT_ID",
-    storageBucket: "DEIN_PROJEKT.appspot.com",
-    messagingSenderId: "DEINE_SENDER_ID",
-    appId: "DEINE_APP_ID"
-  };
-
-  // Firebase initialisieren
-  const app = initializeApp(firebaseConfig);
-  const db = getFirestore(app);
-
-  // --- Bisheriger Code (Users, Goals, XP etc.) ---
-  const XP_PER_LEVEL = 10;
-  let users = {};
-  let currentUser = null;
-
-  // --- STORAGE (Firebase) ---
-  async function loadUserFromCloud(username) {
-    const ref = doc(db, "users", username);
-    const snap = await getDoc(ref);
-    if (snap.exists()) {
-      users[username] = snap.data();
-    } else {
-      users[username] = createDefaultUser(username);
-      await saveUserToCloud(username);
-    }
-  }
-
-  async function saveUserToCloud(username) {
-    const ref = doc(db, "users", username);
-    await setDoc(ref, users[username]);
-  }
-
-  function createDefaultUser(username) {
-    return {
-      totalXP: 0,
-      currentLevel: 1,
-      rewards: [],
-      goals: [{ id: 1, name: "Read 20 pages", target: 20, progress: 0, lastUpdate: null, decayRate: 0 }],
-      streak: 0,
-      lastActive: null,
-      activityLog: {},
-      settings: { bgColor: "#ffffff" }
-    };
-  }
-
-  // Beispiel: Daten speichern, wenn Fortschritt gemacht wird
-  async function progressGoal(goalId, amount) {
-    const data = users[currentUser];
-    const goal = data.goals.find(g => g.id === goalId);
-    goal.progress += amount;
-    goal.lastUpdate = new Date().toISOString().split("T")[0];
-    addXP(data, amount);
-    renderGoals(); renderXP(); renderHeatmap(); renderOverview();
-    await saveUserToCloud(currentUser);  // ⬅️ Speichern in Firestore
-  }
-
-  // ... alle deine Render-Funktionen wie vorher ...
-
-  // Init
-  async function init() {
-    // z.B. User1 laden
-    currentUser = "User1";
-    await loadUserFromCloud(currentUser);
-
-    renderUserSelect();
-    renderGoals();
-    renderXP();
-    renderHeatmap();
-    renderOverview();
-  }
-
-  init();
-</script>
-
-    
-    // Init
-    loadAllUsers();
-    if(!Object.keys(users).length){
-      getUserData("User1"); getUserData("User2");
-      currentUser="User1";
-    }else{currentUser=Object.keys(users)[0];}
-    renderUserSelect(); renderGoals(); renderXP(); renderHeatmap(); renderOverview();
-    document.getElementById("user-select").addEventListener("change",e=>{
-      currentUser=e.target.value;
-      renderGoals(); renderXP(); renderHeatmap(); renderOverview(); saveAllUsers();
-    });
   </script>
 </body>
 </html>
