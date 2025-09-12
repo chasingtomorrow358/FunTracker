@@ -1,45 +1,74 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <meta charset="utf-8">
-  <title>My Progress Tracker</title>
+  <meta charset="UTF-8">
+  <title>My Ambition Tracker</title>
   <style>
     body { font-family: sans-serif; padding: 20px; max-width: 800px; margin: auto; }
+    h1 { text-align: center; }
+
+    /* XP Bar */
+    .xp-bar { margin: 20px 0; }
+    .progress-bar { height: 25px; background: #eee; border-radius: 12px; overflow: hidden; }
+    .progress-bar-inner { height: 100%; background: linear-gradient(90deg, #4caf50, #81c784); width: 0%; transition: width 0.5s; }
+
+    /* Goals */
     .goal { margin-bottom: 20px; padding: 10px; border: 1px solid #ccc; border-radius: 5px; }
-    .progress-bar { height: 20px; background: #eee; border-radius: 10px; overflow: hidden; }
-    .progress-bar-inner { height: 100%; background: #4caf50; width: 0%; transition: width 0.5s; }
     .badge { display: inline-block; margin: 5px; padding: 5px 10px; background: gold; border-radius: 5px; }
   </style>
 </head>
 <body>
-  <h1>My Ambitions Tracker</h1>
-  <div id="dashboard">
-    <!-- Goals will go here -->
+  <h1>🎯 My Ambition Tracker</h1>
+
+  <!-- XP Bar -->
+  <div class="xp-bar">
+    <h2>XP Progress</h2>
+    <div class="progress-bar">
+      <div id="xp-bar-inner" class="progress-bar-inner"></div>
+    </div>
+    <p id="xp-info">XP: 0 / 10 (Level 1)</p>
+    <div id="rewards"></div>
   </div>
+
+  <div id="dashboard"></div>
   <button id="add-goal">Add Goal</button>
 
   <script>
-    // Data structure for goals
+    // --- SETTINGS ---
+    const POINTS_PER_ACTION = 1;   // Punkte pro Klick
+    const XP_PER_LEVEL = 10;       // Punkte für ein Level
+
+    // --- STATE ---
+    let totalXP = 0;
+    let currentLevel = 1;
+    let rewards = [];
+
     let goals = [
-      // Example
-      { id: 1, name: "Read 20 pages daily", target: 20, progress: 0, streak: 0, points: 0 }
+      { id: 1, name: "Read 20 pages", target: 20, progress: 0 }
     ];
 
-    // Gamification settings
-    const POINTS_PER_UNIT = 1;  // e.g. 1 point per 'unit' of progress
-    const LEVEL_THRESHOLDS = [0, 50, 150, 300, 500]; // points needed for levels 1,2,3...
+    // --- FUNCTIONS ---
+    function renderXP() {
+      const xpInLevel = totalXP % XP_PER_LEVEL;
+      const percent = (xpInLevel / XP_PER_LEVEL) * 100;
+
+      document.getElementById("xp-bar-inner").style.width = percent + "%";
+      document.getElementById("xp-info").innerText =
+        `XP: ${xpInLevel} / ${XP_PER_LEVEL} (Level ${currentLevel})`;
+
+      // Rewards anzeigen
+      document.getElementById("rewards").innerHTML =
+        rewards.map(r => `<span class="badge">🏆 ${r}</span>`).join(" ");
+    }
 
     function renderGoals() {
-      const dash = document.getElementById('dashboard');
-      dash.innerHTML = '';
+      const dash = document.getElementById("dashboard");
+      dash.innerHTML = "";
       goals.forEach(goal => {
-        const div = document.createElement('div');
-        div.className = 'goal';
-        const level = getLevel(goal.points);
+        const div = document.createElement("div");
+        div.className = "goal";
         div.innerHTML = `
-          <h2>${goal.name}</h2>
-          <p>Level ${level} — Points: ${goal.points}</p>
-          <div class="progress-bar"><div class="progress-bar-inner" style="width:${Math.min(100, (goal.progress/goal.target)*100)}%"></div></div>
+          <h3>${goal.name}</h3>
           <p>Progress: ${goal.progress} / ${goal.target}</p>
           <button onclick="incProgress(${goal.id})">+1</button>
         `;
@@ -47,38 +76,43 @@
       });
     }
 
-    function getLevel(points) {
-      for(let i = LEVEL_THRESHOLDS.length -1; i >=0; i--) {
-        if(points >= LEVEL_THRESHOLDS[i]) return i+1;
-      }
-      return 1;
-    }
-
     function incProgress(goalId) {
       const goal = goals.find(g => g.id === goalId);
       if (!goal) return;
       goal.progress += 1;
-      goal.points += POINTS_PER_UNIT;
-      if (goal.progress >= goal.target) {
-        // maybe reward badge, reset progress or increase target etc.
-        alert(`Goal "${goal.name}" achieved!`);
-        // Example: reset progress, maybe increase target
-      }
+
+      // XP erhöhen
+      totalXP += POINTS_PER_ACTION;
+      checkLevelUp();
+
       renderGoals();
+      renderXP();
     }
 
-    document.getElementById('add-goal').addEventListener('click', () => {
+    function checkLevelUp() {
+      const newLevel = Math.floor(totalXP / XP_PER_LEVEL) + 1;
+      if (newLevel > currentLevel) {
+        currentLevel = newLevel;
+        const reward = `Reward for reaching Level ${currentLevel}!`;
+        rewards.push(reward);
+        alert(reward);
+      }
+    }
+
+    // Goal hinzufügen
+    document.getElementById("add-goal").addEventListener("click", () => {
       const name = prompt("Goal name:");
-      const target = parseInt(prompt("Target (units):"),10);
-      if (name && target>0) {
-        const id = goals.length ? goals[goals.length-1].id + 1 : 1;
-        goals.push({ id, name, target, progress:0, streak:0, points:0 });
+      const target = parseInt(prompt("Target (units):"), 10);
+      if (name && target > 0) {
+        const id = goals.length ? goals[goals.length - 1].id + 1 : 1;
+        goals.push({ id, name, target, progress: 0 });
         renderGoals();
       }
     });
 
     // Initial render
     renderGoals();
+    renderXP();
   </script>
 </body>
 </html>
