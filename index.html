@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <title>My Ambition Tracker</title>
   <style>
-    body { font-family: sans-serif; padding: 20px; max-width: 800px; margin: auto; }
+    body { font-family: sans-serif; padding: 20px; max-width: 900px; margin: auto; }
     h1 { text-align: center; }
 
     /* XP Bar */
@@ -12,41 +12,26 @@
     .progress-bar { height: 25px; background: #eee; border-radius: 12px; overflow: hidden; }
     .progress-bar-inner { height: 100%; background: linear-gradient(90deg, #4caf50, #81c784); width: 0%; transition: width 0.5s; }
 
-    /* Goals */
     .goal { margin-bottom: 20px; padding: 10px; border: 1px solid #ccc; border-radius: 5px; }
+    .badge { display: inline-block; margin: 5px; padding: 6px 10px; background: gold; border-radius: 12px; font-weight: bold; }
 
-    /* Rewards section */
-    #rewards { margin-top: 10px; }
-    .badge { display: inline-block; margin: 5px; padding: 8px 12px; background: gold; border-radius: 20px; font-weight: bold; }
-    
-    /* Popup animation */
-    .reward-popup {
-      position: fixed;
-      top: 20px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: #ffeb3b;
-      padding: 15px 25px;
-      border-radius: 10px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-      font-size: 1.2em;
-      font-weight: bold;
-      opacity: 0;
-      pointer-events: none;
-      animation: popupFade 3s forwards;
-      z-index: 9999;
-    }
+    /* Collapsible section */
+    .collapsible { background: #ddd; padding: 10px; cursor: pointer; border-radius: 5px; }
+    .collapsible:hover { background: #ccc; }
+    .content { display: none; margin-top: 10px; }
 
-    @keyframes popupFade {
-      0% { opacity: 0; transform: translate(-50%, -30px); }
-      20% { opacity: 1; transform: translate(-50%, 0); }
-      80% { opacity: 1; }
-      100% { opacity: 0; transform: translate(-50%, -30px); }
-    }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { border: 1px solid #aaa; padding: 8px; text-align: center; }
+    th { background: #f0f0f0; }
   </style>
 </head>
 <body>
   <h1>🎯 My Ambition Tracker</h1>
+
+  <!-- User selection -->
+  <label for="user-select">👤 User:</label>
+  <select id="user-select"></select>
+  <button id="add-user">➕ Add User</button>
 
   <!-- XP Bar -->
   <div class="xp-bar">
@@ -58,63 +43,80 @@
     <div id="rewards"></div>
   </div>
 
+  <!-- Goals -->
   <div id="dashboard"></div>
   <button id="add-goal">Add Goal</button>
 
+  <!-- Collapsible user overview -->
+  <div style="margin-top:30px;">
+    <div class="collapsible">📊 Show/Hide User Overview</div>
+    <div class="content" id="user-overview">
+      <table>
+        <thead>
+          <tr>
+            <th>User</th>
+            <th>Level</th>
+            <th>Total XP</th>
+            <th>Goals</th>
+            <th>Rewards</th>
+          </tr>
+        </thead>
+        <tbody id="overview-body"></tbody>
+      </table>
+    </div>
+  </div>
+
   <script>
     // --- SETTINGS ---
-    const POINTS_PER_ACTION = 1;   // Punkte pro Klick
-    const XP_PER_LEVEL = 10;       // Punkte für ein Level
-    const STORAGE_KEY = "ambition-tracker-data";
+    const POINTS_PER_ACTION = 1;
+    const XP_PER_LEVEL = 10;
+    const STORAGE_KEY = "ambition-tracker-users";
 
-    // --- STATE (wird ggf. aus localStorage geladen) ---
-    let totalXP = 0;
-    let currentLevel = 1;
-    let rewards = [];
-    let goals = [];
+    // --- STATE ---
+    let users = {};
+    let currentUser = null;
 
-    // --- LOAD FROM STORAGE ---
-    function loadState() {
+    // --- STORAGE HANDLING ---
+    function loadAllUsers() {
       const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        try {
-          const data = JSON.parse(saved);
-          totalXP = data.totalXP || 0;
-          currentLevel = data.currentLevel || 1;
-          rewards = data.rewards || [];
-          goals = data.goals || [];
-        } catch (e) {
-          console.error("Error loading state:", e);
-        }
-      } else {
-        // Default goals, falls noch nichts gespeichert
-        goals = [{ id: 1, name: "Read 20 pages", target: 20, progress: 0 }];
-      }
+      users = saved ? JSON.parse(saved) : {};
     }
 
-    // --- SAVE TO STORAGE ---
-    function saveState() {
-      const data = { totalXP, currentLevel, rewards, goals };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    function saveAllUsers() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(users));
+    }
+
+    function getUserData(username) {
+      if (!users[username]) {
+        users[username] = {
+          totalXP: 0,
+          currentLevel: 1,
+          rewards: [],
+          goals: [{ id: 1, name: "Read 20 pages", target: 20, progress: 0 }]
+        };
+      }
+      return users[username];
     }
 
     // --- RENDERING ---
     function renderXP() {
-      const xpInLevel = totalXP % XP_PER_LEVEL;
+      const data = getUserData(currentUser);
+      const xpInLevel = data.totalXP % XP_PER_LEVEL;
       const percent = (xpInLevel / XP_PER_LEVEL) * 100;
 
       document.getElementById("xp-bar-inner").style.width = percent + "%";
       document.getElementById("xp-info").innerText =
-        `XP: ${xpInLevel} / ${XP_PER_LEVEL} (Level ${currentLevel})`;
+        `XP: ${xpInLevel} / ${XP_PER_LEVEL} (Level ${data.currentLevel})`;
 
       document.getElementById("rewards").innerHTML =
-        rewards.map(r => `<span class="badge">🏆 ${r}</span>`).join(" ");
+        data.rewards.map(r => `<span class="badge">🏆 ${r}</span>`).join(" ");
     }
 
     function renderGoals() {
+      const data = getUserData(currentUser);
       const dash = document.getElementById("dashboard");
       dash.innerHTML = "";
-      goals.forEach(goal => {
+      data.goals.forEach(goal => {
         const div = document.createElement("div");
         div.className = "goal";
         div.innerHTML = `
@@ -126,56 +128,114 @@
       });
     }
 
+    function renderUserSelect() {
+      const select = document.getElementById("user-select");
+      select.innerHTML = "";
+      Object.keys(users).forEach(username => {
+        const option = document.createElement("option");
+        option.value = username;
+        option.textContent = username;
+        if (username === currentUser) option.selected = true;
+        select.appendChild(option);
+      });
+    }
+
+    function renderOverview() {
+      const tbody = document.getElementById("overview-body");
+      tbody.innerHTML = "";
+      Object.entries(users).forEach(([name, data]) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${name}</td>
+          <td>${data.currentLevel}</td>
+          <td>${data.totalXP}</td>
+          <td>${data.goals.length}</td>
+          <td>${data.rewards.length}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
     // --- LOGIC ---
     function incProgress(goalId) {
-      const goal = goals.find(g => g.id === goalId);
+      const data = getUserData(currentUser);
+      const goal = data.goals.find(g => g.id === goalId);
       if (!goal) return;
       goal.progress += 1;
 
-      // XP erhöhen
-      totalXP += POINTS_PER_ACTION;
-      checkLevelUp();
+      data.totalXP += POINTS_PER_ACTION;
+      checkLevelUp(data);
 
       renderGoals();
       renderXP();
-      saveState();
+      renderOverview();
+      saveAllUsers();
     }
 
-    function checkLevelUp() {
-      const newLevel = Math.floor(totalXP / XP_PER_LEVEL) + 1;
-      if (newLevel > currentLevel) {
-        currentLevel = newLevel;
-        const reward = `Level ${currentLevel} reached!`;
-        rewards.push(reward);
-        showRewardPopup(reward);
-        saveState();
+    function checkLevelUp(data) {
+      const newLevel = Math.floor(data.totalXP / XP_PER_LEVEL) + 1;
+      if (newLevel > data.currentLevel) {
+        data.currentLevel = newLevel;
+        const reward = `Level ${data.currentLevel}`;
+        data.rewards.push(reward);
+        alert(`🎉 ${reward} reached! 🎉`);
       }
     }
 
-    function showRewardPopup(text) {
-      const popup = document.createElement("div");
-      popup.className = "reward-popup";
-      popup.innerText = `🎉 ${text} 🎉`;
-      document.body.appendChild(popup);
-      setTimeout(() => popup.remove(), 3000);
-    }
+    // --- USER SWITCHING ---
+    document.getElementById("user-select").addEventListener("change", e => {
+      currentUser = e.target.value;
+      renderGoals();
+      renderXP();
+      renderOverview();
+      saveAllUsers();
+    });
 
-    // Goal hinzufügen
-    document.getElementById("add-goal").addEventListener("click", () => {
-      const name = prompt("Goal name:");
-      const target = parseInt(prompt("Target (units):"), 10);
-      if (name && target > 0) {
-        const id = goals.length ? goals[goals.length - 1].id + 1 : 1;
-        goals.push({ id, name, target, progress: 0 });
+    document.getElementById("add-user").addEventListener("click", () => {
+      const name = prompt("Enter new username:");
+      if (name && !users[name]) {
+        getUserData(name);
+        currentUser = name;
+        renderUserSelect();
         renderGoals();
-        saveState();
+        renderXP();
+        renderOverview();
+        saveAllUsers();
       }
     });
 
+    document.getElementById("add-goal").addEventListener("click", () => {
+      const data = getUserData(currentUser);
+      const name = prompt("Goal name:");
+      const target = parseInt(prompt("Target (units):"), 10);
+      if (name && target > 0) {
+        const id = data.goals.length ? data.goals[data.goals.length - 1].id + 1 : 1;
+        data.goals.push({ id, name, target, progress: 0 });
+        renderGoals();
+        renderOverview();
+        saveAllUsers();
+      }
+    });
+
+    // --- COLLAPSIBLE LOGIC ---
+    document.querySelector(".collapsible").addEventListener("click", () => {
+      const content = document.querySelector(".content");
+      content.style.display = (content.style.display === "block") ? "none" : "block";
+    });
+
     // --- INIT ---
-    loadState();
+    loadAllUsers();
+    if (!Object.keys(users).length) {
+      getUserData("User1");
+      getUserData("User2");
+      currentUser = "User1";
+    } else {
+      currentUser = Object.keys(users)[0];
+    }
+    renderUserSelect();
     renderGoals();
     renderXP();
+    renderOverview();
   </script>
 </body>
 </html>
