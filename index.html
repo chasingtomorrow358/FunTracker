@@ -15,6 +15,15 @@
     .goal { margin-bottom: 20px; padding: 10px; border: 1px solid #ccc; border-radius: 5px; }
     .badge { display: inline-block; margin: 5px; padding: 6px 10px; background: gold; border-radius: 12px; font-weight: bold; }
 
+    /* Heatmap */
+    .heatmap { display: grid; grid-template-columns: repeat(7, 20px); gap: 3px; margin-top: 10px; }
+    .day { width: 20px; height: 20px; background: #eee; border-radius: 3px; }
+    .day[data-count="1"] { background: #c8e6c9; }
+    .day[data-count="2"] { background: #81c784; }
+    .day[data-count="3"] { background: #4caf50; }
+    .day[data-count="4"] { background: #2e7d32; }
+    .day[data-count="5"] { background: #1b5e20; }
+
     /* Collapsible section */
     .collapsible { background: #ddd; padding: 10px; cursor: pointer; border-radius: 5px; }
     .collapsible:hover { background: #ccc; }
@@ -23,6 +32,9 @@
     table { width: 100%; border-collapse: collapse; margin-top: 10px; }
     th, td { border: 1px solid #aaa; padding: 8px; text-align: center; }
     th { background: #f0f0f0; }
+
+    /* Settings */
+    #settings { display:none; border:1px solid #aaa; padding:15px; margin-top:20px; border-radius:8px; background:#fafafa; }
   </style>
 </head>
 <body>
@@ -32,6 +44,7 @@
   <label for="user-select">👤 User:</label>
   <select id="user-select"></select>
   <button id="add-user">➕ Add User</button>
+  <button id="open-settings">⚙ Einstellungen</button>
 
   <!-- XP Bar -->
   <div class="xp-bar">
@@ -40,6 +53,7 @@
       <div id="xp-bar-inner" class="progress-bar-inner"></div>
     </div>
     <p id="xp-info">XP: 0 / 10 (Level 1)</p>
+    <p id="streak-info">🔥 Streak: 0 Tage</p>
     <div id="rewards"></div>
   </div>
 
@@ -47,7 +61,11 @@
   <div id="dashboard"></div>
   <button id="add-goal">Add Goal</button>
 
-  <!-- Collapsible user overview -->
+  <!-- Heatmap -->
+  <h2>📅 Aktivität</h2>
+  <div id="heatmap" class="heatmap"></div>
+
+  <!-- Collapsible overview -->
   <div style="margin-top:30px;">
     <div class="collapsible">📊 Show/Hide User Overview</div>
     <div class="content" id="user-overview">
@@ -57,6 +75,7 @@
             <th>User</th>
             <th>Level</th>
             <th>Total XP</th>
+            <th>Streak</th>
             <th>Goals</th>
             <th>Rewards</th>
           </tr>
@@ -66,50 +85,95 @@
     </div>
   </div>
 
+  <!-- Settings -->
+  <div id="settings">
+    <h2>⚙ User Settings</h2>
+    <label>Background Color: <input type="color" id="bg-color"></label>
+    <button id="reset-user">Reset Progress</button>
+    <button id="close-settings">Close</button>
+  </div>
+
   <script>
-    // --- SETTINGS ---
-    const POINTS_PER_ACTION = 1;
     const XP_PER_LEVEL = 10;
     const STORAGE_KEY = "ambition-tracker-users";
 
-    // --- STATE ---
     let users = {};
     let currentUser = null;
 
-    // --- STORAGE HANDLING ---
+    // --- STORAGE ---
     function loadAllUsers() {
       const saved = localStorage.getItem(STORAGE_KEY);
       users = saved ? JSON.parse(saved) : {};
     }
-
     function saveAllUsers() {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(users));
     }
-
     function getUserData(username) {
       if (!users[username]) {
         users[username] = {
           totalXP: 0,
           currentLevel: 1,
           rewards: [],
-          goals: [{ id: 1, name: "Read 20 pages", target: 20, progress: 0 }]
+          goals: [{ id: 1, name: "Read 20 pages", target: 20, progress: 0, lastUpdate: null, decayRate: 0 }],
+          streak: 0,
+          lastActive: null,
+          activityLog: {},
+          settings: { bgColor: "#ffffff" }
         };
       }
       return users[username];
     }
 
-    // --- RENDERING ---
+    // --- LOGIC ---
+    function addXP(data, amount) {
+      // Streak handling
+      const today = new Date().toISOString().split("T")[0];
+      if (data.lastActive) {
+        const diff = (new Date(today) - new Date(data.lastActive)) / (1000*60*60*24);
+        if (diff === 1) data.streak++;
+        else if (diff > 1) data.streak = 1;
+      } else {
+        data.streak = 1;
+      }
+      data.lastActive = today;
+
+      // Consistency bonus
+      let multiplier = data.streak >= 5 ? 2 : 1;
+      data.totalXP += amount * multiplier;
+
+      // Activity log
+      data.activityLog[today] = (data.activityLog[today] || 0) + amount;
+
+      // Level up
+      const newLevel = Math.floor(data.totalXP / XP_PER_LEVEL) + 1;
+      if (newLevel > data.currentLevel) {
+        data.currentLevel = newLevel;
+        data.rewards.push(`Level ${newLevel}`);
+        alert(`🎉 Level ${newLevel} erreicht!`);
+      }
+    }
+
+    function applyDecay(goal) {
+      if (!goal.lastUpdate) return;
+      const today = new Date().toISOString().split("T")[0];
+      const diff = (new Date(today) - new Date(goal.lastUpdate)) / (1000*60*60*24);
+      if (diff > 0 && goal.decayRate > 0) {
+        goal.progress = Math.max(0, goal.progress - diff * goal.decayRate);
+      }
+    }
+
+    // --- RENDER ---
     function renderXP() {
       const data = getUserData(currentUser);
       const xpInLevel = data.totalXP % XP_PER_LEVEL;
       const percent = (xpInLevel / XP_PER_LEVEL) * 100;
-
       document.getElementById("xp-bar-inner").style.width = percent + "%";
       document.getElementById("xp-info").innerText =
         `XP: ${xpInLevel} / ${XP_PER_LEVEL} (Level ${data.currentLevel})`;
-
+      document.getElementById("streak-info").innerText = `🔥 Streak: ${data.streak} Tage`;
       document.getElementById("rewards").innerHTML =
         data.rewards.map(r => `<span class="badge">🏆 ${r}</span>`).join(" ");
+      document.body.style.backgroundColor = data.settings.bgColor;
     }
 
     function renderGoals() {
@@ -117,125 +181,213 @@
       const dash = document.getElementById("dashboard");
       dash.innerHTML = "";
       data.goals.forEach(goal => {
+        applyDecay(goal);
         const div = document.createElement("div");
         div.className = "goal";
         div.innerHTML = `
           <h3>${goal.name}</h3>
-          <p>Progress: ${goal.progress} / ${goal.target}</p>
-          <button onclick="incProgress(${goal.id})">+1</button>
+          <p>Progress: ${Math.floor(goal.progress)} / ${goal.target}</p>
+          <p>Decay Rate: ${goal.decayRate} pro Tag</p>
+          <button onclick="progressGoal(${goal.id},1)">Minimum</button>
+          <button onclick="progressGoal(${goal.id},2)">Normal</button>
+          <button onclick="progressGoal(${goal.id},5)">Super gut</button>
         `;
         dash.appendChild(div);
+      });
+    }
+
+    function renderHeatmap() {
+      const data = getUserData(currentUser);
+      const heatmap = document.getElementById("heatmap");
+      heatmap.innerHTML = "";
+      const today = new Date();
+      for (let i=29; i>=0; i--) {
+        const d = new Date(today);
+        d.setDate(d.getDate()-i);
+        const key = d.toISOString().split("T")[0];
+        const count = data.activityLog[key] || 0;
+        const div = document.createElement("div");
+        div.className = "day";
+        if (count>0) div.dataset.count = Math.min(count,5);
+        heatmap.appendChild(div);
+      }
+    }
+
+    function renderOverview() {
+      const tbody = document.getElementById("overview-body");
+      tbody.innerHTML = "";
+      Object.entries(users).forEach(([name,data])=>{
+        const tr = document.createElement("tr");
+        tr.innerHTML=`
+          <td>${name}</td>
+          <td>${data.currentLevel}</td>
+          <td>${data.totalXP}</td>
+          <td>${data.streak}</td>
+          <td>${data.goals.length}</td>
+          <td>${data.rewards.length}</td>`;
+        tbody.appendChild(tr);
       });
     }
 
     function renderUserSelect() {
       const select = document.getElementById("user-select");
       select.innerHTML = "";
-      Object.keys(users).forEach(username => {
-        const option = document.createElement("option");
-        option.value = username;
-        option.textContent = username;
-        if (username === currentUser) option.selected = true;
-        select.appendChild(option);
+      Object.keys(users).forEach(u=>{
+        const opt=document.createElement("option");
+        opt.value=u; opt.textContent=u;
+        if(u===currentUser) opt.selected=true;
+        select.appendChild(opt);
       });
     }
 
-    function renderOverview() {
-      const tbody = document.getElementById("overview-body");
-      tbody.innerHTML = "";
-      Object.entries(users).forEach(([name, data]) => {
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-          <td>${name}</td>
-          <td>${data.currentLevel}</td>
-          <td>${data.totalXP}</td>
-          <td>${data.goals.length}</td>
-          <td>${data.rewards.length}</td>
-        `;
-        tbody.appendChild(tr);
-      });
-    }
-
-    // --- LOGIC ---
-    function incProgress(goalId) {
-      const data = getUserData(currentUser);
-      const goal = data.goals.find(g => g.id === goalId);
-      if (!goal) return;
-      goal.progress += 1;
-
-      data.totalXP += POINTS_PER_ACTION;
-      checkLevelUp(data);
-
-      renderGoals();
-      renderXP();
-      renderOverview();
+    // --- ACTIONS ---
+    function progressGoal(goalId, amount){
+      const data=getUserData(currentUser);
+      const goal=data.goals.find(g=>g.id===goalId);
+      goal.progress+=amount;
+      goal.lastUpdate=new Date().toISOString().split("T")[0];
+      addXP(data,amount);
+      renderGoals(); renderXP(); renderHeatmap(); renderOverview();
       saveAllUsers();
     }
 
-    function checkLevelUp(data) {
-      const newLevel = Math.floor(data.totalXP / XP_PER_LEVEL) + 1;
-      if (newLevel > data.currentLevel) {
-        data.currentLevel = newLevel;
-        const reward = `Level ${data.currentLevel}`;
-        data.rewards.push(reward);
-        alert(`🎉 ${reward} reached! 🎉`);
+    document.getElementById("add-goal").addEventListener("click",()=>{
+      const data=getUserData(currentUser);
+      const name=prompt("Goal name:");
+      const target=parseInt(prompt("Target (units):"),10);
+      const decay=parseInt(prompt("Decay per day (0 = none):"),10);
+      if(name && target>0){
+        const id=data.goals.length?data.goals[data.goals.length-1].id+1:1;
+        data.goals.push({id,name,target,progress:0,lastUpdate:null,decayRate:decay});
+        renderGoals(); renderOverview(); saveAllUsers();
       }
-    }
-
-    // --- USER SWITCHING ---
-    document.getElementById("user-select").addEventListener("change", e => {
-      currentUser = e.target.value;
-      renderGoals();
-      renderXP();
-      renderOverview();
-      saveAllUsers();
     });
 
-    document.getElementById("add-user").addEventListener("click", () => {
-      const name = prompt("Enter new username:");
-      if (name && !users[name]) {
-        getUserData(name);
-        currentUser = name;
-        renderUserSelect();
-        renderGoals();
-        renderXP();
-        renderOverview();
+    // Settings
+    document.getElementById("open-settings").addEventListener("click",()=>{
+      document.getElementById("settings").style.display="block";
+      document.getElementById("bg-color").value=getUserData(currentUser).settings.bgColor;
+    });
+    document.getElementById("close-settings").addEventListener("click",()=>{
+      document.getElementById("settings").style.display="none";
+    });
+    document.getElementById("bg-color").addEventListener("input",e=>{
+      getUserData(currentUser).settings.bgColor=e.target.value;
+      renderXP(); saveAllUsers();
+    });
+    document.getElementById("reset-user").addEventListener("click",()=>{
+      if(confirm("Reset progress for this user?")){
+        users[currentUser]=null;
+        delete users[currentUser];
         saveAllUsers();
+        location.reload();
       }
     });
 
-    document.getElementById("add-goal").addEventListener("click", () => {
-      const data = getUserData(currentUser);
-      const name = prompt("Goal name:");
-      const target = parseInt(prompt("Target (units):"), 10);
-      if (name && target > 0) {
-        const id = data.goals.length ? data.goals[data.goals.length - 1].id + 1 : 1;
-        data.goals.push({ id, name, target, progress: 0 });
-        renderGoals();
-        renderOverview();
-        saveAllUsers();
-      }
+    // Collapsible
+    document.querySelector(".collapsible").addEventListener("click",()=>{
+      const c=document.querySelector(".content");
+      c.style.display=(c.style.display==="block")?"none":"block";
     });
 
-    // --- COLLAPSIBLE LOGIC ---
-    document.querySelector(".collapsible").addEventListener("click", () => {
-      const content = document.querySelector(".content");
-      content.style.display = (content.style.display === "block") ? "none" : "block";
-    });
+<!-- ... dein HTML bleibt gleich ... -->
 
-    // --- INIT ---
-    loadAllUsers();
-    if (!Object.keys(users).length) {
-      getUserData("User1");
-      getUserData("User2");
-      currentUser = "User1";
+<!-- Firebase SDKs -->
+<script type="module">
+  // Firebase importieren
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+  import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+
+  // ⬇️ HIER deine Config einfügen
+  const firebaseConfig = {
+    apiKey: "DEIN_API_KEY",
+    authDomain: "DEIN_PROJEKT.firebaseapp.com",
+    projectId: "DEIN_PROJEKT_ID",
+    storageBucket: "DEIN_PROJEKT.appspot.com",
+    messagingSenderId: "DEINE_SENDER_ID",
+    appId: "DEINE_APP_ID"
+  };
+
+  // Firebase initialisieren
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+
+  // --- Bisheriger Code (Users, Goals, XP etc.) ---
+  const XP_PER_LEVEL = 10;
+  let users = {};
+  let currentUser = null;
+
+  // --- STORAGE (Firebase) ---
+  async function loadUserFromCloud(username) {
+    const ref = doc(db, "users", username);
+    const snap = await getDoc(ref);
+    if (snap.exists()) {
+      users[username] = snap.data();
     } else {
-      currentUser = Object.keys(users)[0];
+      users[username] = createDefaultUser(username);
+      await saveUserToCloud(username);
     }
+  }
+
+  async function saveUserToCloud(username) {
+    const ref = doc(db, "users", username);
+    await setDoc(ref, users[username]);
+  }
+
+  function createDefaultUser(username) {
+    return {
+      totalXP: 0,
+      currentLevel: 1,
+      rewards: [],
+      goals: [{ id: 1, name: "Read 20 pages", target: 20, progress: 0, lastUpdate: null, decayRate: 0 }],
+      streak: 0,
+      lastActive: null,
+      activityLog: {},
+      settings: { bgColor: "#ffffff" }
+    };
+  }
+
+  // Beispiel: Daten speichern, wenn Fortschritt gemacht wird
+  async function progressGoal(goalId, amount) {
+    const data = users[currentUser];
+    const goal = data.goals.find(g => g.id === goalId);
+    goal.progress += amount;
+    goal.lastUpdate = new Date().toISOString().split("T")[0];
+    addXP(data, amount);
+    renderGoals(); renderXP(); renderHeatmap(); renderOverview();
+    await saveUserToCloud(currentUser);  // ⬅️ Speichern in Firestore
+  }
+
+  // ... alle deine Render-Funktionen wie vorher ...
+
+  // Init
+  async function init() {
+    // z.B. User1 laden
+    currentUser = "User1";
+    await loadUserFromCloud(currentUser);
+
     renderUserSelect();
     renderGoals();
     renderXP();
+    renderHeatmap();
     renderOverview();
+  }
+
+  init();
+</script>
+
+    
+    // Init
+    loadAllUsers();
+    if(!Object.keys(users).length){
+      getUserData("User1"); getUserData("User2");
+      currentUser="User1";
+    }else{currentUser=Object.keys(users)[0];}
+    renderUserSelect(); renderGoals(); renderXP(); renderHeatmap(); renderOverview();
+    document.getElementById("user-select").addEventListener("change",e=>{
+      currentUser=e.target.value;
+      renderGoals(); renderXP(); renderHeatmap(); renderOverview(); saveAllUsers();
+    });
   </script>
 </body>
 </html>
