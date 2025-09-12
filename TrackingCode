@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>My Progress Tracker</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; max-width: 800px; margin: auto; }
+    .goal { margin-bottom: 20px; padding: 10px; border: 1px solid #ccc; border-radius: 5px; }
+    .progress-bar { height: 20px; background: #eee; border-radius: 10px; overflow: hidden; }
+    .progress-bar-inner { height: 100%; background: #4caf50; width: 0%; transition: width 0.5s; }
+    .badge { display: inline-block; margin: 5px; padding: 5px 10px; background: gold; border-radius: 5px; }
+  </style>
+</head>
+<body>
+  <h1>My Ambitions Tracker</h1>
+  <div id="dashboard">
+    <!-- Goals will go here -->
+  </div>
+  <button id="add-goal">Add Goal</button>
+
+  <script>
+    // Data structure for goals
+    let goals = [
+      // Example
+      { id: 1, name: "Read 20 pages daily", target: 20, progress: 0, streak: 0, points: 0 }
+    ];
+
+    // Gamification settings
+    const POINTS_PER_UNIT = 1;  // e.g. 1 point per 'unit' of progress
+    const LEVEL_THRESHOLDS = [0, 50, 150, 300, 500]; // points needed for levels 1,2,3...
+
+    function renderGoals() {
+      const dash = document.getElementById('dashboard');
+      dash.innerHTML = '';
+      goals.forEach(goal => {
+        const div = document.createElement('div');
+        div.className = 'goal';
+        const level = getLevel(goal.points);
+        div.innerHTML = `
+          <h2>${goal.name}</h2>
+          <p>Level ${level} — Points: ${goal.points}</p>
+          <div class="progress-bar"><div class="progress-bar-inner" style="width:${Math.min(100, (goal.progress/goal.target)*100)}%"></div></div>
+          <p>Progress: ${goal.progress} / ${goal.target}</p>
+          <button onclick="incProgress(${goal.id})">+1</button>
+        `;
+        dash.appendChild(div);
+      });
+    }
+
+    function getLevel(points) {
+      for(let i = LEVEL_THRESHOLDS.length -1; i >=0; i--) {
+        if(points >= LEVEL_THRESHOLDS[i]) return i+1;
+      }
+      return 1;
+    }
+
+    function incProgress(goalId) {
+      const goal = goals.find(g => g.id === goalId);
+      if (!goal) return;
+      goal.progress += 1;
+      goal.points += POINTS_PER_UNIT;
+      if (goal.progress >= goal.target) {
+        // maybe reward badge, reset progress or increase target etc.
+        alert(`Goal "${goal.name}" achieved!`);
+        // Example: reset progress, maybe increase target
+      }
+      renderGoals();
+    }
+
+    document.getElementById('add-goal').addEventListener('click', () => {
+      const name = prompt("Goal name:");
+      const target = parseInt(prompt("Target (units):"),10);
+      if (name && target>0) {
+        const id = goals.length ? goals[goals.length-1].id + 1 : 1;
+        goals.push({ id, name, target, progress:0, streak:0, points:0 });
+        renderGoals();
+      }
+    });
+
+    // Initial render
+    renderGoals();
+  </script>
+</body>
+</html>
