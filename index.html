@@ -2,12 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>My Ambition Tracker</title>
+  <title>Ambition Tracker Hybrid</title>
   <style>
     body { font-family: sans-serif; padding: 20px; max-width: 900px; margin: auto; }
     h1 { text-align: center; }
 
-    /* XP Bar */
     .xp-bar { margin: 20px 0; }
     .progress-bar { height: 25px; background: #eee; border-radius: 12px; overflow: hidden; }
     .progress-bar-inner { height: 100%; background: linear-gradient(90deg, #4caf50, #81c784); width: 0%; transition: width 0.5s; }
@@ -15,7 +14,6 @@
     .goal { margin-bottom: 20px; padding: 10px; border: 1px solid #ccc; border-radius: 5px; }
     .badge { display: inline-block; margin: 5px; padding: 6px 10px; background: gold; border-radius: 12px; font-weight: bold; }
 
-    /* Heatmap */
     .heatmap { display: grid; grid-template-columns: repeat(7, 20px); gap: 3px; margin-top: 10px; }
     .day { width: 20px; height: 20px; background: #eee; border-radius: 3px; }
     .day[data-count="1"] { background: #c8e6c9; }
@@ -24,23 +22,12 @@
     .day[data-count="4"] { background: #2e7d32; }
     .day[data-count="5"] { background: #1b5e20; }
 
-    /* Collapsible section */
-    .collapsible { background: #ddd; padding: 10px; cursor: pointer; border-radius: 5px; }
-    .collapsible:hover { background: #ccc; }
-    .content { display: none; margin-top: 10px; }
-
-    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-    th, td { border: 1px solid #aaa; padding: 8px; text-align: center; }
-    th { background: #f0f0f0; }
-
-    /* Settings */
     #settings { display:none; border:1px solid #aaa; padding:15px; margin-top:20px; border-radius:8px; background:#fafafa; }
   </style>
 </head>
 <body>
-  <h1>🎯 My Ambition Tracker</h1>
+  <h1>🎯 Ambition Tracker Hybrid</h1>
 
-  <!-- User selection -->
   <label for="user-select">👤 User:</label>
   <select id="user-select"></select>
   <button id="add-user">➕ Add User</button>
@@ -52,8 +39,8 @@
     <div class="progress-bar">
       <div id="xp-bar-inner" class="progress-bar-inner"></div>
     </div>
-    <p id="xp-info">XP: 0 / 10 (Level 1)</p>
-    <p id="streak-info">🔥 Streak: 0 Tage</p>
+    <p id="xp-info"></p>
+    <p id="streak-info"></p>
     <div id="rewards"></div>
   </div>
 
@@ -65,26 +52,6 @@
   <h2>📅 Aktivität</h2>
   <div id="heatmap" class="heatmap"></div>
 
-  <!-- Collapsible overview -->
-  <div style="margin-top:30px;">
-    <div class="collapsible">📊 Show/Hide User Overview</div>
-    <div class="content" id="user-overview">
-      <table>
-        <thead>
-          <tr>
-            <th>User</th>
-            <th>Level</th>
-            <th>Total XP</th>
-            <th>Streak</th>
-            <th>Goals</th>
-            <th>Rewards</th>
-          </tr>
-        </thead>
-        <tbody id="overview-body"></tbody>
-      </table>
-    </div>
-  </div>
-
   <!-- Settings -->
   <div id="settings">
     <h2>⚙ User Settings</h2>
@@ -93,40 +60,88 @@
     <button id="close-settings">Close</button>
   </div>
 
-  <script>
-    const XP_PER_LEVEL = 10;
+  <!-- Firebase + App -->
+  <script type="module">
+    // --- Firebase Imports ---
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+    import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+
+    // --- Deine Firebase Config ---
+    const firebaseConfig = {
+      apiKey: "DEIN_API_KEY",
+      authDomain: "DEIN_PROJEKT.firebaseapp.com",
+      projectId: "DEIN_PROJEKT_ID",
+      storageBucket: "DEIN_PROJEKT.appspot.com",
+      messagingSenderId: "DEINE_SENDER_ID",
+      appId: "DEINE_APP_ID"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    // --- Globale Variablen ---
     const STORAGE_KEY = "ambition-tracker-users";
+    const XP_PER_LEVEL = 10;
 
     let users = {};
     let currentUser = null;
 
-    // --- STORAGE ---
-    function loadAllUsers() {
+    // --- LocalStorage ---
+    function loadLocalUsers() {
       const saved = localStorage.getItem(STORAGE_KEY);
       users = saved ? JSON.parse(saved) : {};
     }
-    function saveAllUsers() {
+    function saveLocalUsers() {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(users));
+    }
+
+    // --- Firestore ---
+    async function loadUserFromCloud(username) {
+      try {
+        const ref = doc(db, "users", username);
+        const snap = await getDoc(ref);
+        if (snap.exists()) {
+          users[username] = snap.data();
+          saveLocalUsers();
+          console.log("✅ Daten aus Cloud geladen:", username);
+        }
+      } catch (err) {
+        console.warn("⚠️ Cloud-Laden fehlgeschlagen:", err);
+      }
+    }
+    async function saveUserToCloud(username) {
+      try {
+        const ref = doc(db, "users", username);
+        await setDoc(ref, users[username]);
+        console.log("☁️ Daten hochgeladen:", username);
+      } catch (err) {
+        console.warn("⚠️ Cloud-Speichern fehlgeschlagen:", err);
+      }
+    }
+
+    // --- User Daten ---
+    function createDefaultUser(username) {
+      return {
+        totalXP: 0,
+        currentLevel: 1,
+        rewards: [],
+        goals: [{ id: 1, name: "Read 20 pages", target: 20, progress: 0, lastUpdate: null, decayRate: 0 }],
+        streak: 0,
+        lastActive: null,
+        activityLog: {},
+        settings: { bgColor: "#ffffff" }
+      };
     }
     function getUserData(username) {
       if (!users[username]) {
-        users[username] = {
-          totalXP: 0,
-          currentLevel: 1,
-          rewards: [],
-          goals: [{ id: 1, name: "Read 20 pages", target: 20, progress: 0, lastUpdate: null, decayRate: 0 }],
-          streak: 0,
-          lastActive: null,
-          activityLog: {},
-          settings: { bgColor: "#ffffff" }
-        };
+        users[username] = createDefaultUser(username);
+        saveLocalUsers();
       }
       return users[username];
     }
 
-    // --- LOGIC ---
+    // --- Logik ---
     function addXP(data, amount) {
-      // Streak handling
       const today = new Date().toISOString().split("T")[0];
       if (data.lastActive) {
         const diff = (new Date(today) - new Date(data.lastActive)) / (1000*60*60*24);
@@ -137,14 +152,11 @@
       }
       data.lastActive = today;
 
-      // Consistency bonus
       let multiplier = data.streak >= 5 ? 2 : 1;
       data.totalXP += amount * multiplier;
 
-      // Activity log
       data.activityLog[today] = (data.activityLog[today] || 0) + amount;
 
-      // Level up
       const newLevel = Math.floor(data.totalXP / XP_PER_LEVEL) + 1;
       if (newLevel > data.currentLevel) {
         data.currentLevel = newLevel;
@@ -162,14 +174,13 @@
       }
     }
 
-    // --- RENDER ---
+    // --- Render ---
     function renderXP() {
       const data = getUserData(currentUser);
       const xpInLevel = data.totalXP % XP_PER_LEVEL;
       const percent = (xpInLevel / XP_PER_LEVEL) * 100;
       document.getElementById("xp-bar-inner").style.width = percent + "%";
-      document.getElementById("xp-info").innerText =
-        `XP: ${xpInLevel} / ${XP_PER_LEVEL} (Level ${data.currentLevel})`;
+      document.getElementById("xp-info").innerText = `XP: ${xpInLevel} / ${XP_PER_LEVEL} (Level ${data.currentLevel})`;
       document.getElementById("streak-info").innerText = `🔥 Streak: ${data.streak} Tage`;
       document.getElementById("rewards").innerHTML =
         data.rewards.map(r => `<span class="badge">🏆 ${r}</span>`).join(" ");
@@ -213,22 +224,6 @@
       }
     }
 
-    function renderOverview() {
-      const tbody = document.getElementById("overview-body");
-      tbody.innerHTML = "";
-      Object.entries(users).forEach(([name,data])=>{
-        const tr = document.createElement("tr");
-        tr.innerHTML=`
-          <td>${name}</td>
-          <td>${data.currentLevel}</td>
-          <td>${data.totalXP}</td>
-          <td>${data.streak}</td>
-          <td>${data.goals.length}</td>
-          <td>${data.rewards.length}</td>`;
-        tbody.appendChild(tr);
-      });
-    }
-
     function renderUserSelect() {
       const select = document.getElementById("user-select");
       select.innerHTML = "";
@@ -240,15 +235,16 @@
       });
     }
 
-    // --- ACTIONS ---
-    function progressGoal(goalId, amount){
+    // --- Aktionen ---
+    window.progressGoal = async function(goalId, amount){
       const data=getUserData(currentUser);
       const goal=data.goals.find(g=>g.id===goalId);
       goal.progress+=amount;
       goal.lastUpdate=new Date().toISOString().split("T")[0];
       addXP(data,amount);
-      renderGoals(); renderXP(); renderHeatmap(); renderOverview();
-      saveAllUsers();
+      renderGoals(); renderXP(); renderHeatmap();
+      saveLocalUsers();
+      await saveUserToCloud(currentUser);
     }
 
     document.getElementById("add-goal").addEventListener("click",()=>{
@@ -259,11 +255,11 @@
       if(name && target>0){
         const id=data.goals.length?data.goals[data.goals.length-1].id+1:1;
         data.goals.push({id,name,target,progress:0,lastUpdate:null,decayRate:decay});
-        renderGoals(); renderOverview(); saveAllUsers();
+        renderGoals(); saveLocalUsers(); saveUserToCloud(currentUser);
       }
     });
 
-    // Settings
+    // --- Settings ---
     document.getElementById("open-settings").addEventListener("click",()=>{
       document.getElementById("settings").style.display="block";
       document.getElementById("bg-color").value=getUserData(currentUser).settings.bgColor;
@@ -273,24 +269,46 @@
     });
     document.getElementById("bg-color").addEventListener("input",e=>{
       getUserData(currentUser).settings.bgColor=e.target.value;
-      renderXP(); saveAllUsers();
+      renderXP(); saveLocalUsers(); saveUserToCloud(currentUser);
     });
     document.getElementById("reset-user").addEventListener("click",()=>{
       if(confirm("Reset progress for this user?")){
-        users[currentUser]=null;
-        delete users[currentUser];
-        saveAllUsers();
-        location.reload();
+        users[currentUser]=createDefaultUser(currentUser);
+        saveLocalUsers(); saveUserToCloud(currentUser); renderGoals(); renderXP(); renderHeatmap();
       }
     });
 
-    // Collapsible
-    document.querySelector(".collapsible").addEventListener("click",()=>{
-      const c=document.querySelector(".content");
-      c.style.display=(c.style.display==="block")?"none":"block";
-    });
+    // --- Init ---
+    async function init(){
+      loadLocalUsers();
+      if(!Object.keys(users).length){
+        users["User1"]=createDefaultUser("User1");
+        currentUser="User1"; saveLocalUsers();
+      } else {
+        currentUser=Object.keys(users)[0];
+      }
+      await loadUserFromCloud(currentUser);
+      renderUserSelect(); renderGoals(); renderXP(); renderHeatmap();
+      document.getElementById("user-select").addEventListener("change",async e=>{
+        currentUser=e.target.value;
+        await loadUserFromCloud(currentUser);
+        renderGoals(); renderXP(); renderHeatmap();
+      });
+      document.getElementById("add-user").addEventListener("click",()=>{
+        const name=prompt("Neuer User:");
+        if(name){
+          users[name]=createDefaultUser(name);
+          currentUser=name;
+          saveLocalUsers(); saveUserToCloud(name);
+          renderUserSelect(); renderGoals(); renderXP(); renderHeatmap();
+        }
+      });
+    }
+    init();
+  </script>
+</body>
+</html>
 
-<!-- ... dein HTML bleibt gleich ... -->
 
 <!-- Firebase SDKs -->
 <script type="module">
