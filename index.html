@@ -14,7 +14,35 @@
 
     /* Goals */
     .goal { margin-bottom: 20px; padding: 10px; border: 1px solid #ccc; border-radius: 5px; }
-    .badge { display: inline-block; margin: 5px; padding: 5px 10px; background: gold; border-radius: 5px; }
+
+    /* Rewards section */
+    #rewards { margin-top: 10px; }
+    .badge { display: inline-block; margin: 5px; padding: 8px 12px; background: gold; border-radius: 20px; font-weight: bold; }
+    
+    /* Popup animation */
+    .reward-popup {
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #ffeb3b;
+      padding: 15px 25px;
+      border-radius: 10px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      font-size: 1.2em;
+      font-weight: bold;
+      opacity: 0;
+      pointer-events: none;
+      animation: popupFade 3s forwards;
+      z-index: 9999;
+    }
+
+    @keyframes popupFade {
+      0% { opacity: 0; transform: translate(-50%, -30px); }
+      20% { opacity: 1; transform: translate(-50%, 0); }
+      80% { opacity: 1; }
+      100% { opacity: 0; transform: translate(-50%, -30px); }
+    }
   </style>
 </head>
 <body>
@@ -73,46 +101,3 @@
           <button onclick="incProgress(${goal.id})">+1</button>
         `;
         dash.appendChild(div);
-      });
-    }
-
-    function incProgress(goalId) {
-      const goal = goals.find(g => g.id === goalId);
-      if (!goal) return;
-      goal.progress += 1;
-
-      // XP erhöhen
-      totalXP += POINTS_PER_ACTION;
-      checkLevelUp();
-
-      renderGoals();
-      renderXP();
-    }
-
-    function checkLevelUp() {
-      const newLevel = Math.floor(totalXP / XP_PER_LEVEL) + 1;
-      if (newLevel > currentLevel) {
-        currentLevel = newLevel;
-        const reward = `Reward for reaching Level ${currentLevel}!`;
-        rewards.push(reward);
-        alert(reward);
-      }
-    }
-
-    // Goal hinzufügen
-    document.getElementById("add-goal").addEventListener("click", () => {
-      const name = prompt("Goal name:");
-      const target = parseInt(prompt("Target (units):"), 10);
-      if (name && target > 0) {
-        const id = goals.length ? goals[goals.length - 1].id + 1 : 1;
-        goals.push({ id, name, target, progress: 0 });
-        renderGoals();
-      }
-    });
-
-    // Initial render
-    renderGoals();
-    renderXP();
-  </script>
-</body>
-</html>
