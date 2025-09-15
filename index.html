@@ -57,22 +57,7 @@
   </div>
 
   <!-- Script -->
-  <script type="module">
-    // --- Firebase ---
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-    import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
-
-    const firebaseConfig = {
-      apiKey: "DEIN_API_KEY",
-      authDomain: "DEIN_PROJEKT.firebaseapp.com",
-      projectId: "DEIN_PROJEKT_ID",
-      storageBucket: "DEIN_PROJEKT.appspot.com",
-      messagingSenderId: "DEINE_SENDER_ID",
-      appId: "DEINE_APP_ID"
-    };
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
-
+  <script>
     // --- Variablen ---
     const STORAGE_KEY = "ambition-tracker-users";
     const XP_PER_LEVEL = 10;
@@ -86,21 +71,6 @@
     }
     function saveLocalUsers() {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(users));
-    }
-
-    // --- Firestore ---
-    async function loadUserFromCloud(username) {
-      const ref = doc(db, "users", username);
-      const snap = await getDoc(ref);
-      if (snap.exists()) {
-        users[username] = snap.data();
-        saveLocalUsers();
-        console.log("☁️ Daten aus Cloud geladen:", username);
-      }
-    }
-    async function saveUserToCloud(username) {
-      const ref = doc(db, "users", username);
-      await setDoc(ref, users[username]);
     }
 
     // --- User Daten ---
@@ -214,7 +184,7 @@
     }
 
     // --- Aktionen ---
-    window.progressGoal = async function(goalId, amount){
+    window.progressGoal = function(goalId, amount){
       const data=getUserData(currentUser);
       const goal=data.goals.find(g=>g.id===goalId);
       goal.progress+=amount;
@@ -222,7 +192,6 @@
       addXP(data,amount);
       renderGoals(); renderXP(); renderHeatmap();
       saveLocalUsers();
-      await saveUserToCloud(currentUser);
     }
     document.getElementById("add-goal").addEventListener("click",()=>{
       const data=getUserData(currentUser);
@@ -232,7 +201,7 @@
       if(name && target>0){
         const id=data.goals.length?data.goals[data.goals.length-1].id+1:1;
         data.goals.push({id,name,target,progress:0,lastUpdate:null,decayRate:decay});
-        renderGoals(); saveLocalUsers(); saveUserToCloud(currentUser);
+        renderGoals(); saveLocalUsers();
       }
     });
 
@@ -246,18 +215,18 @@
     });
     document.getElementById("bg-color").addEventListener("input",e=>{
       getUserData(currentUser).settings.bgColor=e.target.value;
-      renderXP(); saveLocalUsers(); saveUserToCloud(currentUser);
+      renderXP(); saveLocalUsers();
     });
     document.getElementById("reset-user").addEventListener("click",()=>{
       if(confirm("Reset progress for this user?")){
         users[currentUser]=createDefaultUser(currentUser);
-        saveLocalUsers(); saveUserToCloud(currentUser);
+        saveLocalUsers();
         renderGoals(); renderXP(); renderHeatmap();
       }
     });
 
     // --- Init ---
-    async function init(){
+    function init(){
       loadLocalUsers();
       if(!Object.keys(users).length){
         users["User1"]=createDefaultUser("User1");
@@ -265,11 +234,9 @@
       } else {
         currentUser=Object.keys(users)[0];
       }
-      await loadUserFromCloud(currentUser);
       renderUserSelect(); renderGoals(); renderXP(); renderHeatmap();
-      document.getElementById("user-select").addEventListener("change",async e=>{
+      document.getElementById("user-select").addEventListener("change",e=>{
         currentUser=e.target.value;
-        await loadUserFromCloud(currentUser);
         renderGoals(); renderXP(); renderHeatmap();
       });
       document.getElementById("add-user").addEventListener("click",()=>{
@@ -277,7 +244,7 @@
         if(name){
           users[name]=createDefaultUser(name);
           currentUser=name;
-          saveLocalUsers(); saveUserToCloud(name);
+          saveLocalUsers();
           renderUserSelect(); renderGoals(); renderXP(); renderHeatmap();
         }
       });
