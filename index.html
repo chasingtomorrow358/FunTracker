@@ -1,279 +1,197 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <title>FunTracker</title>
   <style>
-    body { font-family: sans-serif; padding: 20px; background: #f4f4f9; }
-    h1 { color: #333; }
-    #controls { margin-bottom: 20px; }
-    button { margin: 5px; padding: 5px 10px; border: none; border-radius: 6px; cursor: pointer; }
-    button:hover { opacity: 0.8; }
-    .goal { border-radius: 12px; padding: 15px; margin-bottom: 15px; box-shadow: 0 2px 6px rgba(0,0,0,0.15); }
-    .heatmap { display: grid; grid-template-columns: repeat(30, 12px); gap: 2px; margin-top: 10px; }
-    .day { width: 12px; height: 12px; background: #eee; border-radius: 2px; }
-    .day[data-count="1"] { background: #c6e48b; }
-    .day[data-count="2"] { background: #7bc96f; }
-    .day[data-count="3"] { background: #239a3b; }
-    .day[data-count="4"] { background: #196127; }
-    .day[data-count="5"] { background: #0d4017; }
-    #xp-bar { width: 100%; height: 20px; background: #ddd; border-radius: 10px; margin: 10px 0; }
-    #xp-bar-inner { height: 20px; background: #4caf50; border-radius: 10px; width: 0%; transition: width 0.3s; }
-    .badge { background: gold; padding: 4px 6px; border-radius: 6px; margin: 2px; display: inline-block; }
-    /* Reward Animation */
-    #reward-popup { 
-      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0.5); 
-      background: white; padding: 20px; border-radius: 12px; box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-      opacity: 0; transition: all 0.5s ease; z-index: 1000; text-align: center;
+    body {
+      font-family: Arial, sans-serif;
+      background: #f4f4f9;
+      margin: 0;
+      padding: 20px;
+      display: flex;
+      justify-content: center;
     }
-    #reward-popup.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+    .container {
+      max-width: 1000px;
+      width: 100%;
+    }
+    h1 {
+      text-align: center;
+    }
+    .user {
+      background: #fff;
+      padding: 15px;
+      border-radius: 10px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    .user-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .goals {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 15px;
+      margin-top: 15px;
+    }
+    .goal {
+      background: #f9f9f9;
+      border-radius: 10px;
+      padding: 10px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .goal-header {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .goal button {
+      margin: 5px;
+    }
+    .heatmap {
+      display: grid;
+      grid-template-columns: repeat(7, 20px);
+      gap: 2px;
+      margin-top: 10px;
+    }
+    .day {
+      width: 20px;
+      height: 20px;
+      background: #e0e0e0;
+      border-radius: 4px;
+    }
+    .day.active {
+      background: #4caf50;
+    }
+    .settings-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 16px;
+    }
   </style>
 </head>
 <body>
-  <h1>🎯 FunTracker</h1>
-
-  <div id="controls">
-    <select id="user-select"></select>
-    <button id="add-user">➕ User</button>
-    <button id="add-goal">➕ Goal</button>
+  <div class="container">
+    <h1>FunTracker</h1>
+    <div id="users"></div>
+    <button onclick="addUser()">➕ Add User</button>
   </div>
-
-  <div id="xp-section">
-    <div id="xp-bar"><div id="xp-bar-inner"></div></div>
-    <p id="xp-info"></p>
-    <p id="streak-info"></p>
-    <div id="rewards"></div>
-  </div>
-
-  <div id="dashboard"></div>
-
-  <div id="reward-popup"></div>
 
   <script>
-    // --- Variablen ---
-    const STORAGE_KEY = "funtracker-users";
-    const XP_PER_LEVEL = 10;
+    let users = JSON.parse(localStorage.getItem("users")) || [];
 
-    let users = {};
-    let currentUser = "User1";
-
-    // --- LocalStorage ---
-    function loadLocalUsers() {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      users = saved ? JSON.parse(saved) : {};
-      if (!users["User1"]) {
-        users["User1"] = { goals: [], totalXP:0, currentLevel:1, streak:0, lastActive:null, rewards:[] };
-      }
+    function save() {
+      localStorage.setItem("users", JSON.stringify(users));
+      render();
     }
 
-    function saveLocalUsers() {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(users));
+    function addUser() {
+      const name = prompt("Enter user name:");
+      if (!name) return;
+      users.push({ name, goals: [] }); // immer mit goals starten
+      save();
     }
 
-    // --- User Management ---
-    function getUserData(username) {
-      if (!users[username]) {
-        users[username] = { goals: [], totalXP:0, currentLevel:1, streak:0, lastActive:null, rewards:[] };
-        saveLocalUsers();
-      }
-      return users[username];
+    function addGoal(userIndex) {
+      const name = prompt("Enter goal name:");
+      if (!name) return;
+      const unit = prompt("Enter unit (e.g. km, pages, reps):") || "";
+      users[userIndex].goals.push({ name, unit, points: [], heatmap: {} });
+      save();
     }
 
-    function addUser(name) {
-      if (!users[name]) {
-        users[name] = { goals: [], totalXP:0, currentLevel:1, streak:0, lastActive:null, rewards:[] };
-        saveLocalUsers();
-        currentUser = name;
-        renderUserSelect();
-        renderGoals();
-        renderXP();
-        renderHeatmap();
-      }
+    function addPoint(userIndex, goalIndex) {
+      const value = parseInt(prompt("Enter points:"), 10);
+      if (isNaN(value)) return;
+      users[userIndex].goals[goalIndex].points.push(value);
+
+      // Heatmap: mark today
+      const today = new Date().toISOString().slice(0,10);
+      users[userIndex].goals[goalIndex].heatmap[today] = true;
+
+      save();
     }
 
-    // --- Goals ---
-    function addGoal(user, name) {
-      const unit = prompt("Einheit für dieses Goal? (z.B. Seiten, Minuten, km)", "Einheiten");
-      const data = getUserData(user);
-      const id = data.goals.length ? data.goals[data.goals.length-1].id + 1 : 1;
-      data.goals.push({ 
-        id, 
-        name, 
-        unit: unit || "Einheiten",
-        progress: 0, 
-        target: 10, 
-        decayRate: 0, 
-        color: "#4caf50", 
-        emoji: "", 
-        activityLog: {}
-      });
-      saveLocalUsers();
-      renderGoals();
-    }
+    function renderHeatmap(goal) {
+      const container = document.createElement("div");
+      container.className = "heatmap";
 
-    function updateGoal(user, id, updates) {
-      const data = getUserData(user);
-      const goal = data.goals.find(g => g.id === id);
-      if(goal){
-        Object.assign(goal, updates);
-        saveLocalUsers();
-        renderGoals();
-      }
-    }
-
-    // --- XP & Streak ---
-    function addXP(data, amount) {
-      const today = new Date().toISOString().split("T")[0];
-      if (data.lastActive) {
-        const diff = (new Date(today) - new Date(data.lastActive)) / (1000*60*60*24);
-        if (diff === 1) data.streak++;
-        else if (diff > 1) data.streak = 1;
-      } else data.streak = 1;
-      data.lastActive = today;
-
-      let multiplier = data.streak >= 5 ? 2 : 1;
-      data.totalXP += amount * multiplier;
-
-      const newLevel = Math.floor(data.totalXP / XP_PER_LEVEL) + 1;
-      if (newLevel > data.currentLevel) {
-        data.currentLevel = newLevel;
-        const reward = getRewardForLevel(newLevel);
-        data.rewards.push(reward);
-        showRewardPopup(`🎉 Level ${newLevel}!<br>Belohnung: ${reward}`);
-      }
-    }
-
-    // --- Belohnungssystem ---
-    const normalRewards = ["🍪 Cookie", "☕ Kaffee", "🎵 Song"];
-    const specialRewards = ["🏆 Pokal", "🎁 Special Gift", "🎯 Achievement"];
-    function getRewardForLevel(level){
-      if(level % 5 === 0) {
-        const idx = Math.floor(Math.random()*specialRewards.length);
-        return specialRewards[idx];
-      } else {
-        const idx = Math.floor(Math.random()*normalRewards.length);
-        return normalRewards[idx];
-      }
-    }
-
-    function showRewardPopup(msg){
-      const popup = document.getElementById("reward-popup");
-      popup.innerHTML = msg;
-      popup.classList.add("show");
-      setTimeout(()=> popup.classList.remove("show"), 2500);
-    }
-
-    // --- Progress Goal ---
-    window.progressGoal = function(goalId, amount){
-      const data = getUserData(currentUser);
-      const goal = data.goals.find(g => g.id === goalId);
-      if(goal){
-        goal.progress += amount;
-        const today = new Date().toISOString().split("T")[0];
-        goal.activityLog[today] = (goal.activityLog[today] || 0) + amount;
-        addXP(data, amount);
-        renderGoals();
-        renderXP();
-        renderHeatmap();
-        saveLocalUsers();
-      }
-    }
-
-    // --- Rendering ---
-    function renderUserSelect(){
-      const select = document.getElementById("user-select");
-      select.innerHTML = "";
-      Object.keys(users).forEach(u => {
-        const opt = document.createElement("option");
-        opt.value = u; opt.textContent = u;
-        if(u === currentUser) opt.selected = true;
-        select.appendChild(opt);
-      });
-    }
-
-    function renderXP(){
-      const data = getUserData(currentUser);
-      const xpInLevel = data.totalXP % XP_PER_LEVEL;
-      const percent = (xpInLevel / XP_PER_LEVEL) * 100;
-      document.getElementById("xp-bar-inner").style.width = percent + "%";
-      document.getElementById("xp-info").innerText = `XP: ${xpInLevel}/${XP_PER_LEVEL} (Level ${data.currentLevel})`;
-      document.getElementById("streak-info").innerText = `🔥 Streak: ${data.streak} Tage`;
-      document.getElementById("rewards").innerHTML = data.rewards.map(r=>`<span class="badge">${r}</span>`).join(" ");
-    }
-
-    function renderGoals(){
-      const data = getUserData(currentUser);
-      const dash = document.getElementById("dashboard");
-      dash.innerHTML = "";
-      data.goals.forEach(goal => {
-        const div = document.createElement("div");
-        div.className = "goal";
-        div.style.backgroundColor = goal.color;
-        div.innerHTML = `
-          <h3>${goal.name} ${goal.emoji}</h3>
-          <p>Progress: ${Math.floor(goal.progress)}/${goal.target} ${goal.unit}</p>
-          <p>Decay: ${goal.decayRate} pro Tag</p>
-          <button onclick="progressGoal(${goal.id},1)">Minimum +1</button>
-          <button onclick="progressGoal(${goal.id},2)">Normal +2</button>
-          <button onclick="progressGoal(${goal.id},5)">Super gut +5</button>
-          <br>
-          <button onclick="updateGoal('${currentUser}', ${goal.id}, {color: prompt('Farbe (Hex)', '${goal.color}')})">🎨 Farbe</button>
-          <button onclick="updateGoal('${currentUser}', ${goal.id}, {emoji: prompt('Emoji', '${goal.emoji}')})">✨ Emoji</button>
-          <div class="heatmap" id="heatmap-${goal.id}"></div>
-        `;
-        dash.appendChild(div);
-        renderGoalHeatmap(goal);
-      });
-    }
-
-    function renderHeatmap(){
-      const data = getUserData(currentUser);
-      data.goals.forEach(goal => renderGoalHeatmap(goal));
-    }
-
-    function renderGoalHeatmap(goal){
-      const heatmap = document.getElementById(`heatmap-${goal.id}`);
-      if(!heatmap) return;
-      heatmap.innerHTML = "";
+      // Kalender: 35 Tage (7x5)
       const today = new Date();
-      for(let i=29;i>=0;i--){
-        const d = new Date(today); d.setDate(d.getDate()-i);
-        const key = d.toISOString().split("T")[0];
-        const count = goal.activityLog[key] || 0;
-        const div = document.createElement("div");
-        div.className = "day";
-        if(count>0) div.dataset.count = Math.min(count,5);
-        heatmap.appendChild(div);
+      for (let i = 0; i < 35; i++) {
+        const d = new Date(today);
+        d.setDate(today.getDate() - i);
+        const key = d.toISOString().slice(0,10);
+
+        const cell = document.createElement("div");
+        cell.className = "day";
+        if (goal.heatmap && goal.heatmap[key]) {
+          cell.classList.add("active");
+        }
+
+        container.appendChild(cell);
       }
+
+      return container;
     }
 
-    // --- Init ---
-    function init(){
-      loadLocalUsers();
-      renderUserSelect();
-      renderGoals();
-      renderXP();
-      renderHeatmap();
+    function render() {
+      const usersDiv = document.getElementById("users");
+      usersDiv.innerHTML = "";
 
-      document.getElementById("user-select").addEventListener("change", e=>{
-        currentUser = e.target.value;
-        renderGoals();
-        renderXP();
-        renderHeatmap();
-      });
+      users.forEach((user, ui) => {
+        const userDiv = document.createElement("div");
+        userDiv.className = "user";
 
-      document.getElementById("add-user").addEventListener("click", ()=>{
-        const name = prompt("Neuer User:");
-        if(name) addUser(name);
-      });
+        const header = document.createElement("div");
+        header.className = "user-header";
+        header.innerHTML = `<strong>${user.name}</strong> <button class="settings-btn">⚙️</button>`;
+        userDiv.appendChild(header);
 
-      document.getElementById("add-goal").addEventListener("click", ()=>{
-        const name = prompt("Goal Name:");
-        if(name) addGoal(currentUser, name);
+        const goalsDiv = document.createElement("div");
+        goalsDiv.className = "goals";
+
+        // sicherstellen, dass goals existiert
+        (user.goals || []).forEach((goal, gi) => {
+          const goalDiv = document.createElement("div");
+          goalDiv.className = "goal";
+
+          const gHeader = document.createElement("div");
+          gHeader.className = "goal-header";
+          gHeader.innerHTML = `<span>${goal.name} (${goal.unit})</span> 
+                               <button class="settings-btn">⚙️</button>`;
+          goalDiv.appendChild(gHeader);
+
+          const addBtn = document.createElement("button");
+          addBtn.textContent = "➕ Add Points";
+          addBtn.onclick = () => addPoint(ui, gi);
+          goalDiv.appendChild(addBtn);
+
+          goalDiv.appendChild(renderHeatmap(goal));
+
+          goalsDiv.appendChild(goalDiv);
+        });
+
+        userDiv.appendChild(goalsDiv);
+
+        const addGoalBtn = document.createElement("button");
+        addGoalBtn.textContent = "➕ Add Goal";
+        addGoalBtn.onclick = () => addGoal(ui);
+        userDiv.appendChild(addGoalBtn);
+
+        usersDiv.appendChild(userDiv);
       });
     }
 
-    init();
+    render();
   </script>
 </body>
 </html>
