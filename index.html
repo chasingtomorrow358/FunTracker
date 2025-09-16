@@ -86,12 +86,18 @@
   </div>
 
   <script>
-    let users = JSON.parse(localStorage.getItem("users")) || [];
+   let users = JSON.parse(localStorage.getItem("users")) || [];
 
-    function save() {
-      localStorage.setItem("users", JSON.stringify(users));
-      render();
-    }
+// Falls alte Struktur (Objekt) noch im Speicher liegt → konvertieren
+if (!Array.isArray(users)) {
+  // wir wandeln das alte "users = {User1: {...}}" Schema um
+  users = Object.keys(users).map(name => ({
+    name,
+    goals: users[name].goals || []
+  }));
+  localStorage.setItem("users", JSON.stringify(users));
+}
+
 
     function addUser() {
       const name = prompt("Enter user name:");
