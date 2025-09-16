@@ -102,21 +102,120 @@
 
 <script>
 /* ---------- STORAGE / MIGRATION ---------- */
-// (gleich wie vorher, siehe dein Code)
 const LEGACY_KEYS = ["ambition-tracker-users","ambition-tracker-users-v1","funtracker-users","users","ambition-tracker"];
-const STORAGE_KEY = "ambition-tracker-users";
+const STORAGE_KEY = "ambition-tracker-users"; // canonical key we use
 
-function loadLocalUsers(){ /* ... identisch ... */ }
-function convertLegacyUser(item, keyName){ /* ... identisch ... */ }
-function saveLocalUsers(obj){ localStorage.setItem(STORAGE_KEY, JSON.stringify(obj)); }
-function createDefaultUser(name){ /* ... identisch ... */ }
+function loadLocalUsers(){
+  // try canonical key first, else search legacy
+  let raw = localStorage.getItem(STORAGE_KEY);
+  if (!raw) {
+    for (const k of LEGACY_KEYS){
+      const v = localStorage.getItem(k);
+      if (v) { raw = v; break; }
+    }
+  }
+  if (!raw) {
+    // nothing: create default user
+    const u = {};
+    u["User1"] = createDefaultUser("User1");
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(u));
+    return u;
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    // parsed could be object-mapping, or array of users, or old shape
+    if (Array.isArray(parsed)) {
+      // convert array [{name, goals, ...}] -> mapping
+      const obj = {};
+      parsed.forEach(item => {
+        const name = item.name || item.username || ("User"+(Object.keys(obj).length+1));
+        obj[name] = convertLegacyUser(item);
+      });
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(obj));
+      return obj;
+    } else if (typeof parsed === "object" && parsed !== null) {
+      // If already mapping (e.g. {"User1": {...}})
+      // Ensure every user has proper shape
+      const obj = {};
+      for (const key of Object.keys(parsed)){
+        // if parsed[key] looks like userData or old shape
+        obj[key] = convertLegacyUser(parsed[key], key);
+      }
+      // save canonical key (in case we loaded from another key)
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(obj));
+      return obj;
+    } else {
+      // unexpected -> create default
+      const u = {}; u["User1"]=createDefaultUser("User1");
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(u));
+      return u;
+    }
+  } catch(e){
+    console.error("Fehler beim Parsen localStorage, neues Schema wird erstellt", e);
+    const u = {}; u["User1"]=createDefaultUser("User1");
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(u));
+    return u;
+  }
+}
+
+function convertLegacyUser(item, keyName){
+  // Build up new shape from various known legacy shapes
+  const username = keyName || item.name || item.username || "User";
+  const u = createDefaultUser(username);
+  // copy known fields if present
+  if (typeof item.totalXP !== "undefined") u.totalXP = item.totalXP;
+  if (typeof item.currentLevel !== "undefined") u.currentLevel = item.currentLevel;
+  if (Array.isArray(item.rewards)) u.rewards = item.rewards.slice();
+  // Goals may be in item.goals or item.tasks
+  const legacyGoals = item.goals || item.tasks || [];
+  if (Array.isArray(legacyGoals)) {
+    u.goals = legacyGoals.map((g, i) => {
+      return {
+        id: g.id || (i+1),
+        name: g.name || g.title || ("Goal "+(i+1)),
+        unit: g.unit || g.units || g.unitLabel || "Einheiten",
+        progress: typeof g.progress === "number" ? g.progress : (g.progress || 0),
+        target: g.target || 10,
+        decayRate: g.decayRate || 0,
+        color: g.color || "#4caf50",
+        emoji: g.emoji || g.icon || "",
+        imgData: g.imgData || g.img || null,
+        activityLog: g.activityLog || g.activity || {}
+      };
+    });
+  }
+  return u;
+}
+
+function saveLocalUsers(obj){
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(obj));
+}
+
+/* ---------- DATA SHAPE ---------- */
+function createDefaultUser(name){
+  return {
+    name: name,
+    totalXP: 0,
+    currentLevel: 1,
+    rewards: [],
+    goals: [],
+    streak: 0,
+    lastActive: null,
+    settings: { bgColor: "#ffffff" }
+  };
+}
 
 /* ---------- App state ---------- */
-let users = loadLocalUsers();
+let users = loadLocalUsers(); // object mapping username -> userData
 let currentUser = Object.keys(users)[0] || "User1";
 
 /* ---------- Helpers ---------- */
-function uidForGoal(userData){ const ids=(userData.goals||[]).map(g=>g.id||0); return ids.length?Math.max(...ids)+1:1; }
+function uidForGoal(userData){
+  // generate unique id
+  const ids = (userData.goals||[]).map(g=>g.id||0);
+  const max = ids.length ? Math.max(...ids) : 0;
+  return max+1;
+}
 
 /* ---------- UI elements ---------- */
 const userSelect = document.getElementById("user-select");
@@ -146,90 +245,334 @@ function renderAll(){
 function renderUserSelect(){
   userSelect.innerHTML = "";
   const keys = Object.keys(users);
-  if (!keys.length) return; // keine User vorhanden
   for (const k of keys){
     const opt = document.createElement("option");
-    opt.value = k; 
-    opt.textContent = k;
+    opt.value = k; opt.textContent = k;
     if (k === currentUser) opt.selected = true;
     userSelect.appendChild(opt);
   }
-  if (!currentUser) currentUser = keys[0];
+  if (!currentUser && keys.length) currentUser = keys[0];
 }
 
 function addUserInteractive(){
   const name = prompt("Neuer User (Name):", "User" + (Object.keys(users).length + 1));
-  if (!name) return; // Abbruch, falls leer
-  if (users[name]) { 
-    alert("User existiert bereits"); 
-    return; 
-  }
+  if (!name) return;
+  if (users[name]) { alert("User existiert bereits"); return; }
   users[name] = createDefaultUser(name);
   currentUser = name;
   saveLocalUsers(users);
   renderAll();
 }
 
-
-function addGoalInteractive(){ if(!currentUser){ alert("Kein User aktiv"); return; } const name=prompt("Name des Ziels:"); if(!name)return; const unit=prompt("Einheit (z.B. Seiten, Minuten):","Einheiten"); const data=users[currentUser]; const id=uidForGoal(data); data.goals.push({ id,name,unit:unit||"Einheiten",progress:0,target:10,decayRate:0,color:"#ffffff",emoji:"",imgData:null,activityLog:{} }); renderAll(); }
+function addGoalInteractive(){
+  if (!currentUser) { alert("Kein User aktiv"); return; }
+  const name = prompt("Name des Ziels:");
+  if (!name) return;
+  const unit = prompt("Einheit (z.B. Seiten, Minuten):", "Einheiten");
+  const data = users[currentUser];
+  const id = uidForGoal(data);
+  data.goals.push({
+    id, name, unit: unit || "Einheiten", progress: 0, target: 10, decayRate: 0, color: "#ffffff", emoji: "", imgData: null, activityLog: {}
+  });
+  saveLocalUsers(users);
+  renderGoals();
+}
 
 /* ---------- Progress & XP ---------- */
-const XP_PER_LEVEL=10;
-const normalRewards=["🍪 Cookie","☕ Coffee","🎵 Song","🍫 Schoki"];
-const specialRewards=["🏆 Trophy","🎁 Special Gift","🎯 Achievement","🎉 Surprise"];
+const XP_PER_LEVEL = 10;
+const normalRewards = ["🍪 Cookie","☕ Coffee","🎵 Song","🍫 Schoki"];
+const specialRewards = ["🏆 Trophy","🎁 Special Gift","🎯 Achievement","🎉 Surprise"];
 
-function addXPToUser(userObj,amount){ const today=new Date().toISOString().split("T")[0]; if(userObj.lastActive){ const diff=Math.round((new Date(today)-new Date(userObj.lastActive))/(1000*60*60*24)); if(diff===1) userObj.streak=(userObj.streak||0)+1; else if(diff>1) userObj.streak=1; } else userObj.streak=1; userObj.lastActive=today; let multiplier=(userObj.streak>=5)?2:1; userObj.totalXP=(userObj.totalXP||0)+amount*multiplier; const newLevel=Math.floor(userObj.totalXP/XP_PER_LEVEL)+1; if(newLevel>(userObj.currentLevel||1)){ userObj.currentLevel=newLevel; const r=(newLevel%5===0)?specialRewards[Math.floor(Math.random()*specialRewards.length)]:normalRewards[Math.floor(Math.random()*normalRewards.length)]; userObj.rewards=userObj.rewards||[]; userObj.rewards.push(r); showRewardPop(`🎉 Level ${newLevel}!<br>${r}`); } }
+function addXPToUser(userObj, amount){
+  const today = new Date().toISOString().split("T")[0];
+  if (userObj.lastActive){
+    const diff = Math.round((new Date(today) - new Date(userObj.lastActive))/(1000*60*60*24));
+    if (diff === 1) userObj.streak = (userObj.streak || 0) + 1;
+    else if (diff > 1) userObj.streak = 1;
+  } else userObj.streak = 1;
+  userObj.lastActive = today;
 
-function resetGoal(goal){
-  if(confirm("Fortschritt dieses Ziels zurücksetzen?")){
-    goal.progress = 0;
-    goal.activityLog = {};
-    saveLocalUsers(users);
-    renderAll();
+  let multiplier = (userObj.streak >= 5) ? 2 : 1;
+  userObj.totalXP = (userObj.totalXP || 0) + amount * multiplier;
+
+  const newLevel = Math.floor(userObj.totalXP / XP_PER_LEVEL) + 1;
+  if (newLevel > (userObj.currentLevel||1)){
+    userObj.currentLevel = newLevel;
+    // pick rewards
+    const r = (newLevel % 5 === 0) ? specialRewards[Math.floor(Math.random()*specialRewards.length)]
+                                  : normalRewards[Math.floor(Math.random()*normalRewards.length)];
+    userObj.rewards = userObj.rewards || [];
+    userObj.rewards.push(r);
+    showRewardPop(`🎉 Level ${newLevel}!<br>${r}`);
   }
 }
 
-  
-/* ---------- Progress buttons ---------- */
-window.progressGoal=function(goalId,amount){ const data=users[currentUser]; if(!data) return; const goal=data.goals.find(g=>g.id===goalId); if(!goal) return; goal.progress=(goal.progress||0)+amount; const today=new Date().toISOString().split("T")[0]; goal.activityLog=goal.activityLog||{}; goal.activityLog[today]=(goal.activityLog[today]||0)+amount; addXPToUser(data,amount); saveLocalUsers(users); renderAll(); }
+/* ---------- Progress buttons (global) ---------- */
+window.progressGoal = function(goalId, amount){
+  const data = users[currentUser];
+  if(!data) return;
+  const goal = data.goals.find(g => g.id === goalId);
+  if (!goal) return;
+  // increment
+  goal.progress = (goal.progress || 0) + amount;
+  const today = new Date().toISOString().split("T")[0];
+  goal.activityLog = goal.activityLog || {};
+  goal.activityLog[today] = (goal.activityLog[today] || 0) + amount;
+  addXPToUser(data, amount);
+  saveLocalUsers(users);
+  renderAll();
+};
 
 /* ---------- Render XP & rewards ---------- */
-function renderXP(){ const data=users[currentUser]; if(!data){ xpInner.style.width="0%"; xpInfo.textContent=""; return; } const xpInLevel=(data.totalXP||0)%XP_PER_LEVEL; const percent=Math.round((xpInLevel/XP_PER_LEVEL)*100); xpInner.style.width=percent+"%"; xpInfo.textContent=`XP: ${xpInLevel} / ${XP_PER_LEVEL} (Level ${data.currentLevel||1})`; userNameEl.textContent=data.name||currentUser; userLevelEl.textContent=`Level ${data.currentLevel||1}`; streakInfoEl.textContent=`🔥 Streak: ${data.streak||0} Tage`; rewardsDiv.innerHTML=(data.rewards||[]).slice(-6).map(r=>`<span class="badge">${r}</span>`).join(" "); }
+function renderXP(){
+  const data = users[currentUser];
+  if(!data) { xpInner.style.width = "0%"; xpInfo.textContent=""; return; }
+  const xpInLevel = (data.totalXP || 0) % XP_PER_LEVEL;
+  const percent = Math.round((xpInLevel / XP_PER_LEVEL) * 100);
+  xpInner.style.width = percent + "%";
+  xpInfo.textContent = `XP: ${xpInLevel} / ${XP_PER_LEVEL} (Level ${(data.currentLevel||1)})`;
+  userNameEl.textContent = data.name || currentUser;
+  userLevelEl.textContent = `Level ${data.currentLevel||1}`;
+  streakInfoEl.textContent = `🔥 Streak: ${data.streak || 0} Tage`;
+  rewardsDiv.innerHTML = (data.rewards || []).slice(-6).map(r => `<span class="badge">${r}</span>`).join(" ");
+}
 
-/* ---------- Render Goals ---------- */
-function renderGoals(){ goalGrid.innerHTML=""; const data=users[currentUser]; if(!data) return; (data.goals||[]).forEach(goal=>{ const card=document.createElement("div"); card.className="goal-card"; card.style.background=goal.color||"#fff"; const top=document.createElement("div"); top.className="goal-top"; const title=document.createElement("div"); title.className="goal-title"; title.innerHTML=`${goal.emoji?`<span>${goal.emoji}</span>`:""}<span>${escapeHtml(goal.name)}</span>`; const settingsBtn=document.createElement("button"); settingsBtn.className="settings"; settingsBtn.textContent="⚙"; settingsBtn.addEventListener("click",()=>openGoalSettings(goal)); top.appendChild(title); top.appendChild(settingsBtn); card.appendChild(top); const meta=document.createElement("div"); meta.className="goal-meta"; meta.innerHTML=`Progress: <strong>${Math.floor(goal.progress||0)}</strong> / ${goal.target} ${escapeHtml(goal.unit||"Einheiten")}`; card.appendChild(meta); const actions=document.createElement("div"); actions.className="goal-actions"; ["1","2","5"].forEach(v=>{ const b=document.createElement("button"); b.textContent=v==="1"?"Minimum +1":(v==="2"?"Normal +2":"Super +5"); b.addEventListener("click",()=>window.progressGoal(goal.id,Number(v))); actions.appendChild(b); }); Reset button const resetBtn=document.createElement("button"); resetBtn.textContent="Reset"; resetBtn.style.background="#ffcccc"; resetBtn.addEventListener("click", ()=> resetGoal(goal));
-); actions.appendChild(resetBtn); card.appendChild(actions); const heat=renderGoalHeatmap(goal); card.appendChild(heat); goalGrid.appendChild(card); }); }
+/* ---------- Render Goals (3-column grid) ---------- */
+function renderGoals(){
+  goalGrid.innerHTML = "";
+  const data = users[currentUser];
+  if(!data) return;
+  const goals = data.goals || [];
+  goals.forEach(goal=>{
+    const card = document.createElement("div"); card.className = "goal-card";
+    card.style.background = goal.color || "#fff";
 
-/* ---------- Heatmap ---------- */
-function renderGoalHeatmap(goal){ const container=document.createElement("div"); container.className="heatmap"; const today=new Date(); const days=[]; for(let i=34;i>=0;i--){ const d=new Date(today); d.setDate(d.getDate()-i); days.push(d); } days.forEach(d=>{ const key=d.toISOString().split("T")[0]; const count=(goal.activityLog&&goal.activityLog[key])||0; const cell=document.createElement("div"); cell.className="day"; if(count>0){ cell.setAttribute("data-count",String(Math.min(count,5))); } cell.title=`${d.toLocaleDateString()}: ${count}`; cell.addEventListener("click",()=>{ goal.activityLog=goal.activityLog||{}; goal.activityLog[key]=(goal.activityLog[key]||0)+1; goal.progress=(goal.progress||0)+1; addXPToUser(users[currentUser],1); saveLocalUsers(users); renderAll(); }); container.appendChild(cell); }); return container; }
+    // header
+    const top = document.createElement("div"); top.className = "goal-top";
+    const title = document.createElement("div"); title.className = "goal-title";
+    title.innerHTML = `${goal.emoji ? `<span>${goal.emoji}</span>` : ""}<span>${escapeHtml(goal.name)}</span>`;
+    const settingsBtn = document.createElement("button"); settingsBtn.className="settings"; settingsBtn.textContent="⚙";
+    settingsBtn.addEventListener("click", ()=> openGoalSettings(goal));
+    top.appendChild(title); top.appendChild(settingsBtn);
+    card.appendChild(top);
+
+    // meta
+    const meta = document.createElement("div"); meta.className="goal-meta";
+    meta.innerHTML = `Progress: <strong>${Math.floor(goal.progress||0)}</strong> / ${goal.target} ${escapeHtml(goal.unit||"Einheiten")}`;
+    card.appendChild(meta);
+
+    // action buttons
+    const actions = document.createElement("div"); actions.className="goal-actions";
+    ["1","2","5"].forEach(v=>{
+      const b = document.createElement("button");
+      b.textContent = v === "1" ? "Minimum +1" : (v==="2"?"Normal +2":"Super +5");
+      b.addEventListener("click", ()=> window.progressGoal(goal.id, Number(v)));
+      actions.appendChild(b);
+    });
+    card.appendChild(actions);
+
+    // heatmap (calendar-like last 35 days)
+    const heat = renderGoalHeatmap(goal);
+    card.appendChild(heat);
+
+    goalGrid.appendChild(card);
+  });
+}
+
+/* ---------- Heatmap rendering (7x5) ---------- */
+function renderGoalHeatmap(goal){
+  const container = document.createElement("div"); container.className = "heatmap";
+  const today = new Date();
+  // generate last 35 days, oldest first left -> right
+  const days = [];
+  for (let i = 34; i >= 0; i--){
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    days.push(d);
+  }
+  days.forEach(d=>{
+    const key = d.toISOString().split("T")[0];
+    const count = (goal.activityLog && goal.activityLog[key]) || 0;
+    const cell = document.createElement("div"); cell.className = "day";
+    if (count>0) {
+      const c = Math.min(count, 5);
+      cell.setAttribute("data-count", String(c));
+    }
+    // toggle day on click (add one unit and xp)
+    cell.title = `${d.toLocaleDateString()}: ${count}`;
+    cell.addEventListener("click", ()=>{
+      // increment that day's count by 1
+      goal.activityLog = goal.activityLog || {};
+      goal.activityLog[key] = (goal.activityLog[key] || 0) + 1;
+      // also increment goal.progress and xp
+      goal.progress = (goal.progress || 0) + 1;
+      addXPToUser(users[currentUser], 1);
+      saveLocalUsers(users);
+      renderAll();
+    });
+    container.appendChild(cell);
+  });
+  return container;
+}
 
 /* ---------- Goal settings modal ---------- */
-function openGoalSettings(goal){ /* identisch, Modal bleibt unverändert */ }
+function openGoalSettings(goal){
+  showModal(buildGoalSettingsHtml(goal));
+  // wire events after modal rendered
+  const nameI = document.getElementById("modal-goal-name");
+  const unitI = document.getElementById("modal-goal-unit");
+  const colorI = document.getElementById("modal-goal-color");
+  const emojiI = document.getElementById("modal-goal-emoji");
+  const imgUrlI = document.getElementById("modal-goal-imgurl");
+  const fileI = document.getElementById("modal-goal-file");
+
+  // prefill
+  nameI.value = goal.name || "";
+  unitI.value = goal.unit || "";
+  colorI.value = goal.color || "#ffffff";
+  emojiI.value = goal.emoji || "";
+  imgUrlI.value = goal.imgData && !goal.imgData.startsWith("data:") ? goal.imgData : "";
+
+  // file read
+  fileI.addEventListener("change", (e)=>{
+    const f = e.target.files[0];
+    if(!f) return;
+    const r = new FileReader();
+    r.onload = () => { imgUrlI.value = r.result; };
+    r.readAsDataURL(f);
+  });
+
+  document.getElementById("modal-save").addEventListener("click", ()=>{
+    const updates = {
+      name: nameI.value || goal.name,
+      unit: unitI.value || goal.unit,
+      color: colorI.value || goal.color,
+      emoji: emojiI.value || goal.emoji,
+      imgData: imgUrlI.value || null
+    };
+    // update in store
+    const u = users[currentUser];
+    const g = u.goals.find(x=>x.id===goal.id);
+    if (g) Object.assign(g, updates);
+    saveLocalUsers(users);
+    closeModal();
+    renderAll();
+  });
+
+  document.getElementById("modal-delete").addEventListener("click", ()=>{
+    if (!confirm("Dieses Ziel löschen?")) return;
+    const u = users[currentUser];
+    u.goals = u.goals.filter(x=>x.id !== goal.id);
+    saveLocalUsers(users);
+    closeModal();
+    renderAll();
+  });
+
+  document.getElementById("modal-close").addEventListener("click", closeModal);
+}
+
+function buildGoalSettingsHtml(goal){
+  return `
+    <h3>Goal Einstellungen</h3>
+    <label>Name</label>
+    <input id="modal-goal-name" type="text" />
+    <label>Einheit</label>
+    <input id="modal-goal-unit" type="text" />
+    <label>Farbe</label>
+    <input id="modal-goal-color" type="color" />
+    <label>Emoji</label>
+    <input id="modal-goal-emoji" type="text" maxlength="4" />
+    <label>Bild-URL oder Upload</label>
+    <input id="modal-goal-imgurl" type="text" placeholder="https://..." />
+    <input id="modal-goal-file" type="file" accept="image/*" />
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
+      <button id="modal-delete" class="danger">Löschen</button>
+      <button id="modal-save">Speichern</button>
+      <button id="modal-close">Abbrechen</button>
+    </div>
+  `;
+}
 
 /* ---------- Export / Import ---------- */
-function exportData(){ /* identisch */ }
-function importData(){ /* identisch */ }
+function exportData(){
+  const payload = JSON.stringify(users, null, 2);
+  const blob = new Blob([payload], {type:"application/json"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href = url; a.download = `funtracker-backup-${new Date().toISOString().slice(0,10)}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function importData(){
+  showModal(`<h3>Daten importieren</h3>
+    <p class="small">Wähle eine zuvor exportierte JSON-Datei.</p>
+    <input id="import-file" type="file" accept="application/json" />
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px">
+      <button id="import-cancel">Abbrechen</button>
+      <button id="import-do">Importieren (überschreibt)</button>
+    </div>`);
+  document.getElementById("import-cancel").addEventListener("click", closeModal);
+  document.getElementById("import-do").addEventListener("click", ()=>{
+    const f = document.getElementById("import-file").files[0];
+    if(!f) return alert("Keine Datei gewählt");
+    const r = new FileReader();
+    r.onload = ()=> {
+      try {
+        const parsed = JSON.parse(r.result);
+        // if parsed is array convert to mapping
+        let mapped = parsed;
+        if (Array.isArray(parsed)){
+          mapped = {};
+          parsed.forEach(p=>{
+            const name = p.name || ("User"+(Object.keys(mapped).length+1));
+            mapped[name] = convertLegacyUser(p, name);
+          });
+        }
+        // overwrite
+        users = mapped;
+        saveLocalUsers(users);
+        closeModal();
+        renderAll();
+        alert("Import erfolgreich");
+      } catch(e){
+        alert("Import Fehler: " + e.message);
+      }
+    };
+    r.readAsText(f);
+  });
+}
 
 /* ---------- Modal helpers ---------- */
-function showModal(innerHtml){ modalEl.innerHTML=innerHtml; modalBack.style.display="flex"; }
-function closeModal(){ modalBack.style.display="none"; modalEl.innerHTML=""; }
+function showModal(innerHtml){
+  modalEl.innerHTML = innerHtml;
+  modalBack.style.display = "flex";
+}
+function closeModal(){ modalBack.style.display = "none"; modalEl.innerHTML = ""; }
 
 /* ---------- Reward pop ---------- */
-function showRewardPop(html){ rewardPop.innerHTML=html; rewardPop.classList.add("show"); setTimeout(()=>rewardPop.classList.remove("show"),2200); }
+function showRewardPop(html){
+  rewardPop.innerHTML = html;
+  rewardPop.classList.add("show");
+  setTimeout(()=> rewardPop.classList.remove("show"), 2200);
+}
 
 /* ---------- Utilities ---------- */
-function escapeHtml(s){ if(!s) return""; return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m])); }
+function escapeHtml(s){ if(!s) return ""; return String(s).replace(/[&<>"']/g,m=>({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m])); }
 
 /* ---------- Wiring UI ---------- */
-userSelect.addEventListener("change",e=>{ currentUser=e.target.value; renderAll(); });
-btnAddUser.addEventListener("click",addUserInteractive);
-btnAddGoal.addEventListener("click",addGoalInteractive);
-btnExport.addEventListener("click",exportData);
-btnImport.addEventListener("click",importData);
-modalBack.addEventListener("click",e=>{ if(e.target===modalBack) closeModal(); });
+document.getElementById("user-select").addEventListener("change", (e)=>{
+  currentUser = e.target.value;
+  renderAll();
+});
+btnAddUser.addEventListener("click", addUserInteractive);
+btnAddGoal.addEventListener("click", addGoalInteractive);
+btnExport.addEventListener("click", exportData);
+btnImport.addEventListener("click", importData);
+modalBack.addEventListener("click", (e)=>{ if(e.target === modalBack) closeModal(); });
 
 /* ---------- Initialization ---------- */
 renderAll();
+
 </script>
 </body>
 </html>
