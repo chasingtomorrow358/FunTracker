@@ -136,10 +136,40 @@ const modalEl = document.getElementById("modal");
 const rewardPop = document.getElementById("reward-pop");
 
 /* ---------- Core actions ---------- */
-function renderAll(){ renderUserSelect(); renderXP(); renderGoals(); saveLocalUsers(users); }
-function renderUserSelect(){ userSelect.innerHTML=""; Object.keys(users).forEach(k=>{ const opt=document.createElement("option"); opt.value=k; opt.textContent=k; if(k===currentUser) opt.selected=true; userSelect.appendChild(opt); }); }
+function renderAll(){
+  renderUserSelect();
+  renderXP();
+  renderGoals();
+  saveLocalUsers(users);
+}
 
-function addUserInteractive(){ const name=prompt("Neuer User (Name):","User"+(Object.keys(users).length+1)); if(!name)return; if(users[name]){ alert("User existiert bereits"); return; } users[name]=createDefaultUser(name); currentUser=name; renderAll(); }
+function renderUserSelect(){
+  userSelect.innerHTML = "";
+  const keys = Object.keys(users);
+  if (!keys.length) return; // keine User vorhanden
+  for (const k of keys){
+    const opt = document.createElement("option");
+    opt.value = k; 
+    opt.textContent = k;
+    if (k === currentUser) opt.selected = true;
+    userSelect.appendChild(opt);
+  }
+  if (!currentUser) currentUser = keys[0];
+}
+
+function addUserInteractive(){
+  const name = prompt("Neuer User (Name):", "User" + (Object.keys(users).length + 1));
+  if (!name) return; // Abbruch, falls leer
+  if (users[name]) { 
+    alert("User existiert bereits"); 
+    return; 
+  }
+  users[name] = createDefaultUser(name);
+  currentUser = name;
+  saveLocalUsers(users);
+  renderAll();
+}
+
 
 function addGoalInteractive(){ if(!currentUser){ alert("Kein User aktiv"); return; } const name=prompt("Name des Ziels:"); if(!name)return; const unit=prompt("Einheit (z.B. Seiten, Minuten):","Einheiten"); const data=users[currentUser]; const id=uidForGoal(data); data.goals.push({ id,name,unit:unit||"Einheiten",progress:0,target:10,decayRate:0,color:"#ffffff",emoji:"",imgData:null,activityLog:{} }); renderAll(); }
 
