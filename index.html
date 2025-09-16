@@ -1,216 +1,179 @@
-<script type="module">
-  // --- Variablen ---
-  const STORAGE_KEY = "ambition-tracker-users";
-  const XP_PER_LEVEL = 10;
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>🎯 Ambition Tracker</title>
+  <style>
+    body { font-family:sans-serif; padding:20px; max-width:800px; margin:auto; }
+    .progress-bar { height:20px; background:#eee; border-radius:10px; overflow:hidden; }
+    .progress-bar-inner { height:100%; background:linear-gradient(90deg,#4caf50,#81c784); width:0%; transition: width 0.3s; }
+    .goal { padding:10px; margin:10px 0; border-radius:10px; background:#f0f0f0; }
+    .heatmap { display:grid; grid-template-columns:repeat(30,1fr); gap:2px; margin-top:5px; }
+    .day { width:10px; height:10px; background:#ddd; border-radius:2px; }
+    .day[data-count="1"] { background:#c8e6c9; }
+    .day[data-count="2"] { background:#81c784; }
+    .day[data-count="3"] { background:#4caf50; }
+    .day[data-count="4"] { background:#2e7d32; }
+    .day[data-count="5"] { background:#1b5e20; }
+    .badge { display:inline-block; background:gold; padding:4px 8px; border-radius:8px; margin:3px; }
+  </style>
+</head>
+<body>
+  <h1>🎯 Ambition Tracker</h1>
 
-  let users = {};
-  let currentUser = "User1";
+  <label for="user-select">User:</label>
+  <select id="user-select"></select>
+  <button id="add-user">Add User</button>
+  <button id="add-goal">Add Goal</button>
 
-  // --- LocalStorage ---
-  function loadLocalUsers() {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    users = saved ? JSON.parse(saved) : {};
-    if (!users["User1"]) {
-      users["User1"] = { goals: [], totalXP:0, currentLevel:1, streak:0, lastActive:null, rewards:[] };
+  <div class="progress-bar" style="margin-top:20px;">
+    <div id="xp-bar-inner" class="progress-bar-inner"></div>
+  </div>
+  <p id="xp-info"></p>
+  <p id="streak-info"></p>
+  <div id="rewards"></div>
+
+  <div id="dashboard"></div>
+
+  <script type="module">
+    // --- Daten laden & speichern ---
+    function loadUsers() {
+      return JSON.parse(localStorage.getItem("users") || "{}");
     }
-  }
-
-  function saveLocalUsers() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(users));
-  }
-
-  // --- Goal & User Management ---
-  function getUserData(username) {
-    if (!users[username]) {
-      users[username] = { goals: [], totalXP:0, currentLevel:1, streak:0, lastActive:null, rewards:[] };
-      saveLocalUsers();
+    function saveUsers(users) {
+      localStorage.setItem("users", JSON.stringify(users));
     }
-    return users[username];
-  }
 
-  function addGoal(user, name) {
-    const data = getUserData(user);
-    const id = data.goals.length ? data.goals[data.goals.length-1].id + 1 : 1;
-    data.goals.push({ 
-      id, 
-      name, 
-      progress: 0, 
-      target: 10, 
-      decayRate: 0, 
-      color: "#4caf50", 
-      emoji: "", 
-      activityLog: {}
-    });
-    saveLocalUsers();
-    renderGoals();
-  }
+    // --- UI Referenzen ---
+    const userSelect = document.getElementById("user-select");
+    const addUserBtn = document.getElementById("add-user");
+    const addGoalBtn = document.getElementById("add-goal");
+    const dashboard = document.getElementById("dashboard");
+    const xpBarInner = document.getElementById("xp-bar-inner");
+    const xpInfo = document.getElementById("xp-info");
+    const streakInfo = document.getElementById("streak-info");
+    const rewardsDiv = document.getElementById("rewards");
 
-  function updateGoal(user, id, updates) {
-    const data = getUserData(user);
-    const goal = data.goals.find(g => g.id === id);
-    if(goal){
-      Object.assign(goal, updates);
-      saveLocalUsers();
-      renderGoals();
+    let users = loadUsers();
+    let currentUser = null;
+
+    function updateUserSelect() {
+      userSelect.innerHTML = "";
+      Object.keys(users).forEach(name => {
+        const opt = document.createElement("option");
+        opt.value = name;
+        opt.textContent = name;
+        userSelect.appendChild(opt);
+      });
+      if (!currentUser && Object.keys(users).length > 0) {
+        currentUser = Object.keys(users)[0];
+      }
+      if (currentUser) {
+        userSelect.value = currentUser;
+      }
+      renderDashboard();
     }
-  }
 
-  function addUser(name) {
-    if (!users[name]) {
-      users[name] = { goals: [], totalXP:0, currentLevel:1, streak:0, lastActive:null, rewards:[] };
-      saveLocalUsers();
+    function addUser() {
+      const name = prompt("Neuer Benutzername:");
+      if (!name) return;
+      if (users[name]) return alert("User existiert schon!");
+      users[name] = { goals: [], xp: 0, streak: 0, lastCheckIn: null, badges: [] };
+      saveUsers(users);
       currentUser = name;
-      renderUserSelect();
-      renderGoals();
-      renderXP();
-      renderHeatmap();
+      updateUserSelect();
     }
-  }
 
-  // --- XP & Streak ---
-  function addXP(data, amount) {
-    const today = new Date().toISOString().split("T")[0];
-    if (data.lastActive) {
-      const diff = (new Date(today) - new Date(data.lastActive)) / (1000*60*60*24);
-      if (diff === 1) data.streak++;
-      else if (diff > 1) data.streak = 1;
-    } else data.streak = 1;
-    data.lastActive = today;
-
-    let multiplier = data.streak >= 5 ? 2 : 1;
-    data.totalXP += amount * multiplier;
-
-    const newLevel = Math.floor(data.totalXP / XP_PER_LEVEL) + 1;
-    if (newLevel > data.currentLevel) {
-      data.currentLevel = newLevel;
-      const reward = getRewardForLevel(newLevel);
-      data.rewards.push(reward);
-      alert(`🎉 Level ${newLevel} erreicht! Belohnung: ${reward}`);
+    function addGoal() {
+      if (!currentUser) return alert("Bitte erst User auswählen!");
+      const title = prompt("Zielbeschreibung:");
+      if (!title) return;
+      users[currentUser].goals.push({ title, progress: [] });
+      saveUsers(users);
+      renderDashboard();
     }
-  }
 
-  // --- Belohnungssystem ---
-  const normalRewards = ["🍪 Cookie", "☕ Coffee", "🎵 Song"];
-  const specialRewards = ["🏆 Trophy", "🎁 Special Gift", "🎯 Achievement"];
-  function getRewardForLevel(level){
-    if(level % 5 === 0) {
-      const idx = Math.floor(Math.random()*specialRewards.length);
-      return specialRewards[idx];
-    } else {
-      const idx = Math.floor(Math.random()*normalRewards.length);
-      return normalRewards[idx];
+    function toggleDay(goalIndex, day) {
+      const g = users[currentUser].goals[goalIndex];
+      const i = g.progress.indexOf(day);
+      if (i >= 0) {
+        g.progress.splice(i,1);
+      } else {
+        g.progress.push(day);
+        grantXP(10);
+      }
+      saveUsers(users);
+      renderDashboard();
     }
-  }
 
-  // --- Progress Goal ---
-  window.progressGoal = function(goalId, amount){
-    const data = getUserData(currentUser);
-    const goal = data.goals.find(g => g.id === goalId);
-    if(goal){
-      goal.progress += amount;
-      const today = new Date().toISOString().split("T")[0];
-      goal.activityLog[today] = (goal.activityLog[today] || 0) + amount;
-      addXP(data, amount);
-      renderGoals();
-      renderXP();
-      renderHeatmap();
-      saveLocalUsers();
+    function grantXP(amount) {
+      const u = users[currentUser];
+      u.xp += amount;
+      const today = new Date().toDateString();
+      if (u.lastCheckIn === today) {
+        // streak already counted today
+      } else {
+        const yesterday = new Date(); yesterday.setDate(yesterday.getDate()-1);
+        if (u.lastCheckIn === yesterday.toDateString()) {
+          u.streak++;
+        } else {
+          u.streak = 1;
+        }
+        u.lastCheckIn = today;
+      }
+      if (u.streak === 7 && !u.badges.includes("🔥 7-Tage Streak")) {
+        u.badges.push("🔥 7-Tage Streak");
+      }
+      saveUsers(users);
     }
-  }
 
-  // --- Rendering ---
-  function renderUserSelect(){
-    const select = document.getElementById("user-select");
-    select.innerHTML = "";
-    Object.keys(users).forEach(u => {
-      const opt = document.createElement("option");
-      opt.value = u; opt.textContent = u;
-      if(u === currentUser) opt.selected = true;
-      select.appendChild(opt);
-    });
-  }
+    function renderDashboard() {
+      if (!currentUser) return;
+      const u = users[currentUser];
+      dashboard.innerHTML = "";
+      u.goals.forEach((g,gi) => {
+        const div = document.createElement("div");
+        div.className = "goal";
+        div.innerHTML = "<strong>"+g.title+"</strong>";
+        const heatmap = document.createElement("div");
+        heatmap.className = "heatmap";
+        const today = new Date();
+        for (let i=29; i>=0; i--) {
+          const d = new Date();
+          d.setDate(today.getDate()-i);
+          const dayStr = d.toDateString();
+          const cell = document.createElement("div");
+          cell.className = "day";
+          const count = g.progress.filter(x => x===dayStr).length;
+          if (count > 0) {
+            cell.dataset.count = Math.min(count,5);
+          }
+          cell.title = dayStr;
+          cell.addEventListener("click",()=>toggleDay(gi,dayStr));
+          heatmap.appendChild(cell);
+        }
+        div.appendChild(heatmap);
+        dashboard.appendChild(div);
+      });
 
-  function renderXP(){
-    const data = getUserData(currentUser);
-    const xpInLevel = data.totalXP % XP_PER_LEVEL;
-    const percent = (xpInLevel / XP_PER_LEVEL) * 100;
-    document.getElementById("xp-bar-inner").style.width = percent + "%";
-    document.getElementById("xp-info").innerText = `XP: ${xpInLevel}/${XP_PER_LEVEL} (Level ${data.currentLevel})`;
-    document.getElementById("streak-info").innerText = `🔥 Streak: ${data.streak} Tage`;
-    document.getElementById("rewards").innerHTML = data.rewards.map(r=>`<span class="badge">${r}</span>`).join(" ");
-  }
-
-  function renderGoals(){
-    const data = getUserData(currentUser);
-    const dash = document.getElementById("dashboard");
-    dash.innerHTML = "";
-    data.goals.forEach(goal => {
-      const div = document.createElement("div");
-      div.className = "goal";
-      div.style.backgroundColor = goal.color;
-      div.innerHTML = `
-        <h3>${goal.name} ${goal.emoji}</h3>
-        <p>Progress: ${Math.floor(goal.progress)}/${goal.target}</p>
-        <p>Decay: ${goal.decayRate} pro Tag</p>
-        <button onclick="progressGoal(${goal.id},1)">Minimum</button>
-        <button onclick="progressGoal(${goal.id},2)">Normal</button>
-        <button onclick="progressGoal(${goal.id},5)">Super gut</button>
-        <br>
-        <button onclick="updateGoal('${currentUser}', ${goal.id}, {color: prompt('Farbe (Hex)', '${goal.color}')})">🎨 Farbe</button>
-        <button onclick="updateGoal('${currentUser}', ${goal.id}, {emoji: prompt('Emoji', '${goal.emoji}')})">✨ Emoji</button>
-        <div class="heatmap" id="heatmap-${goal.id}"></div>
-      `;
-      dash.appendChild(div);
-      renderGoalHeatmap(goal);
-    });
-  }
-
-  function renderHeatmap(){
-    const data = getUserData(currentUser);
-    data.goals.forEach(goal => renderGoalHeatmap(goal));
-  }
-
-  function renderGoalHeatmap(goal){
-    const heatmap = document.getElementById(`heatmap-${goal.id}`);
-    if(!heatmap) return;
-    heatmap.innerHTML = "";
-    const today = new Date();
-    for(let i=29;i>=0;i--){
-      const d = new Date(today); d.setDate(d.getDate()-i);
-      const key = d.toISOString().split("T")[0];
-      const count = goal.activityLog[key] || 0;
-      const div = document.createElement("div");
-      div.className = "day";
-      if(count>0) div.dataset.count = Math.min(count,5);
-      heatmap.appendChild(div);
+      // XP & Streak
+      xpBarInner.style.width = (u.xp % 100)+"%";
+      xpInfo.textContent = "XP: "+u.xp+" (Level "+Math.floor(u.xp/100)+")";
+      streakInfo.textContent = "🔥 Streak: "+u.streak+" Tage";
+      rewardsDiv.innerHTML = "";
+      u.badges.forEach(b => {
+        const span = document.createElement("span");
+        span.className="badge";
+        span.textContent = b;
+        rewardsDiv.appendChild(span);
+      });
     }
-  }
 
-  // --- Init ---
-  function init(){
-    loadLocalUsers();
-    renderUserSelect();
-    renderGoals();
-    renderXP();
-    renderHeatmap();
+    userSelect.addEventListener("change",()=>{currentUser=userSelect.value; renderDashboard();});
+    addUserBtn.addEventListener("click", addUser);
+    addGoalBtn.addEventListener("click", addGoal);
 
-    document.getElementById("user-select").addEventListener("change", e=>{
-      currentUser = e.target.value;
-      renderGoals();
-      renderXP();
-      renderHeatmap();
-    });
-
-    document.getElementById("add-user").addEventListener("click", ()=>{
-      const name = prompt("Neuer User:");
-      if(name) addUser(name);
-    });
-
-    document.getElementById("add-goal").addEventListener("click", ()=>{
-      const name = prompt("Goal Name:");
-      if(name) addGoal(currentUser, name);
-    });
-  }
-
-  init();
-</script>
+    updateUserSelect();
+  </script>
+</body>
+</html>
