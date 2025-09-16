@@ -1,189 +1,180 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Ambition Tracker</title>
-  <style>
-    body { font-family: sans-serif; padding: 20px; max-width: 900px; margin:auto; background:#f7f7f7; }
-    h1 { text-align:center; }
-    .xp-bar { margin:20px 0; position:relative; }
-    .progress-bar { height:25px; background:#eee; border-radius:12px; overflow:hidden; box-shadow: inset 0 0 3px #aaa; }
-    .progress-bar-inner { height:100%; background: linear-gradient(90deg, #4caf50, #81c784); width:0%; transition: width 0.5s; }
-    .goal { padding:10px; border-radius:12px; margin-bottom:15px; box-shadow:0 2px 6px rgba(0,0,0,0.1); }
-    .goal h3 { margin:0 0 5px 0; }
-    .goal button { margin:3px; cursor:pointer; }
-    .badge { display:inline-block; margin:5px; padding:6px 10px; background:gold; border-radius:12px; font-weight:bold; }
-    .heatmap { display:grid; grid-template-columns: repeat(7,20px); gap:3px; margin-top:5px; }
-    .day { width:20px; height:20px; background:#eee; border-radius:4px; transition: background 0.3s; }
-    .day[data-count="1"] { background:#c8e6c9; }
-    .day[data-count="2"] { background:#81c784; }
-    .day[data-count="3"] { background:#4caf50; }
-    .day[data-count="4"] { background:#2e7d32; }
-    .day[data-count="5"] { background:#1b5e20; }
-
-    /* Reward Pop Animation */
-    .reward-pop {
-      position: absolute;
-      font-size: 24px;
-      animation: pop 1s ease forwards;
-      pointer-events: none;
-      z-index: 1000;
-    }
-    @keyframes pop {
-      0% { transform: translateY(0) scale(1); opacity:1; }
-      50% { transform: translateY(-50px) scale(1.5); opacity:1; }
-      100% { transform: translateY(0) scale(1); opacity:0; }
-    }
-  </style>
+<meta charset="UTF-8">
+<title>Ambition Tracker</title>
+<style>
+body { font-family: sans-serif; padding:20px; max-width:900px; margin:auto; background:#f7f7f7; }
+h1 { text-align:center; }
+.xp-bar { margin:20px 0; position:relative; }
+.progress-bar { height:25px; background:#eee; border-radius:12px; overflow:hidden; box-shadow: inset 0 0 3px #aaa; }
+.progress-bar-inner { height:100%; background: linear-gradient(90deg,#4caf50,#81c784); width:0%; transition: width 0.5s; }
+.goal { padding:10px; border-radius:12px; margin-bottom:15px; box-shadow:0 2px 6px rgba(0,0,0,0.1); }
+.goal h3 { margin:0 0 5px 0; }
+.goal button { margin:3px; cursor:pointer; }
+.badge { display:inline-block; margin:5px; padding:6px 10px; background:gold; border-radius:12px; font-weight:bold; }
+.heatmap { display:grid; grid-template-columns: repeat(7,20px); gap:3px; margin-top:5px; }
+.day { width:20px; height:20px; background:#eee; border-radius:4px; transition: background 0.3s; }
+.day[data-count="1"] { background:#c8e6c9; }
+.day[data-count="2"] { background:#81c784; }
+.day[data-count="3"] { background:#4caf50; }
+.day[data-count="4"] { background:#2e7d32; }
+.day[data-count="5"] { background:#1b5e20; }
+.reward-pop { position:absolute; font-size:24px; animation:pop 1s ease forwards; pointer-events:none; z-index:1000; }
+@keyframes pop { 0%{transform:translateY(0) scale(1);opacity:1;}50%{transform:translateY(-50px) scale(1.5);opacity:1;}100%{transform:translateY(0) scale(1);opacity:0;} }
+</style>
 </head>
 <body>
-  <h1>🎯 Ambition Tracker</h1>
+<h1>🎯 Ambition Tracker</h1>
 
-  <label for="user-select">User:</label>
-  <select id="user-select"></select>
-  <button id="add-user">Add User</button>
-  <button id="add-goal">Add Goal</button>
+<label for="user-select">User:</label>
+<select id="user-select"></select>
+<button id="add-user">Add User</button>
+<button id="add-goal">Add Goal</button>
 
-  <div class="xp-bar">
-    <div class="progress-bar">
-      <div id="xp-bar-inner" class="progress-bar-inner"></div>
-    </div>
-    <p id="xp-info"></p>
-    <p id="streak-info"></p>
-    <div id="rewards"></div>
-  </div>
+<div class="xp-bar">
+<div class="progress-bar">
+<div id="xp-bar-inner" class="progress-bar-inner"></div>
+</div>
+<p id="xp-info"></p>
+<p id="streak-info"></p>
+<div id="rewards"></div>
+</div>
 
-  <div id="dashboard"></div>
+<div id="dashboard"></div>
 
-  <script type="module">
-    const STORAGE_KEY = "ambition-tracker-users";
-    const XP_PER_LEVEL = 10;
-    let users = {};
-    let currentUser = "User1";
+<script type="text/javascript">
+const STORAGE_KEY="ambition-tracker-users", XP_PER_LEVEL=10;
+let users={}, currentUser="User1";
 
-    function loadLocalUsers() {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      users = saved ? JSON.parse(saved) : {};
-      if (!users["User1"]) users["User1"] = { goals: [], totalXP:0, currentLevel:1, streak:0, lastActive:null, rewards:[] };
-    }
-    function saveLocalUsers() { localStorage.setItem(STORAGE_KEY, JSON.stringify(users)); }
+function loadLocalUsers(){
+    const saved=localStorage.getItem(STORAGE_KEY);
+    users=saved?JSON.parse(saved):{};
+    if(!users["User1"]) users["User1"]={goals:[],totalXP:0,currentLevel:1,streak:0,lastActive:null,rewards:[]};
+}
+function saveLocalUsers(){ localStorage.setItem(STORAGE_KEY,JSON.stringify(users)); }
 
-    function getUserData(username) {
-      if(!users[username]) { users[username]={goals:[],totalXP:0,currentLevel:1,streak:0,lastActive:null,rewards:[]}; saveLocalUsers(); }
-      return users[username];
-    }
+window.getUserData=function(username){
+    if(!users[username]){ users[username]={goals:[],totalXP:0,currentLevel:1,streak:0,lastActive:null,rewards:[]}; saveLocalUsers(); }
+    return users[username];
+}
 
-    function addUser(name){
-      if(!users[name]){
+window.addUser=function(name){
+    if(!users[name]){
         users[name]={goals:[],totalXP:0,currentLevel:1,streak:0,lastActive:null,rewards:[]};
         saveLocalUsers();
         currentUser=name;
         renderUserSelect(); renderGoals(); renderXP(); renderHeatmap();
-      }
     }
+}
 
-    function addGoal(user, name){
-      const data=getUserData(user);
-      const id=data.goals.length?data.goals[data.goals.length-1].id+1:1;
-      data.goals.push({id,name,progress:0,target:10,decayRate:0,color:"#4caf50",emoji:"",activityLog:{}});
-      saveLocalUsers(); renderGoals();
-    }
+window.addGoal=function(user,name){
+    const data=getUserData(user);
+    const id=data.goals.length?data.goals[data.goals.length-1].id+1:1;
+    data.goals.push({id,name,progress:0,target:10,decayRate:0,color:"#4caf50",emoji:"",activityLog:{}});
+    saveLocalUsers(); renderGoals();
+}
 
-    function updateGoal(user,id,updates){
-      const data=getUserData(user);
-      const goal=data.goals.find(g=>g.id===id);
-      if(goal){ Object.assign(goal,updates); saveLocalUsers(); renderGoals(); }
-    }
+window.updateGoal=function(user,id,updates){
+    const data=getUserData(user);
+    const goal=data.goals.find(g=>g.id===id);
+    if(goal){ Object.assign(goal,updates); saveLocalUsers(); renderGoals(); }
+}
 
-    const normalRewards=["🍪 Cookie","☕ Coffee","🎵 Song"];
-    const specialRewards=["🏆 Trophy","🎁 Special Gift","🎯 Achievement"];
-    function getRewardForLevel(level){ return level%5===0? specialRewards[Math.floor(Math.random()*specialRewards.length)] : normalRewards[Math.floor(Math.random()*normalRewards.length)]; }
+const normalRewards=["🍪 Cookie","☕ Coffee","🎵 Song"];
+const specialRewards=["🏆 Trophy","🎁 Special Gift","🎯 Achievement"];
+function getRewardForLevel(level){ return level%5===0? specialRewards[Math.floor(Math.random()*specialRewards.length)] : normalRewards[Math.floor(Math.random()*normalRewards.length)]; }
 
-    function addXP(data,amount){
-      const today=new Date().toISOString().split("T")[0];
-      if(data.lastActive){ const diff=(new Date(today)-new Date(data.lastActive))/(1000*60*60*24); if(diff===1)data.streak++; else if(diff>1)data.streak=1; } else data.streak=1;
-      data.lastActive=today;
-      let multiplier = data.streak>=5?2:1;
-      data.totalXP += amount*multiplier;
-      const newLevel = Math.floor(data.totalXP/XP_PER_LEVEL)+1;
-      if(newLevel>data.currentLevel){
+function addXP(data,amount){
+    const today=new Date().toISOString().split("T")[0];
+    if(data.lastActive){ const diff=(new Date(today)-new Date(data.lastActive))/(1000*60*60*24); if(diff===1)data.streak++; else if(diff>1)data.streak=1; } else data.streak=1;
+    data.lastActive=today;
+    let multiplier=data.streak>=5?2:1;
+    data.totalXP+=amount*multiplier;
+    const newLevel=Math.floor(data.totalXP/XP_PER_LEVEL)+1;
+    if(newLevel>data.currentLevel){
         data.currentLevel=newLevel;
         const reward=getRewardForLevel(newLevel);
         data.rewards.push(reward);
         showRewardAnimation(reward);
-      }
     }
+}
 
-    function showRewardAnimation(reward){
-      const pop=document.createElement("div");
-      pop.className="reward-pop"; pop.innerText=reward;
-      document.body.appendChild(pop);
-      const xpBar=document.getElementById("xp-bar-inner"); const rect=xpBar.getBoundingClientRect();
-      pop.style.left=rect.left+rect.width/2-12+"px"; pop.style.top=rect.top-30+"px";
-      setTimeout(()=>document.body.removeChild(pop),1000);
-      renderXP();
-    }
+function showRewardAnimation(reward){
+    const pop=document.createElement("div");
+    pop.className="reward-pop"; pop.innerText=reward;
+    document.body.appendChild(pop);
+    const xpBar=document.getElementById("xp-bar-inner"); const rect=xpBar.getBoundingClientRect();
+    pop.style.left=rect.left+rect.width/2-12+"px"; pop.style.top=rect.top-30+"px";
+    setTimeout(()=>document.body.removeChild(pop),1000);
+    renderXP();
+}
 
-    window.progressGoal=function(goalId,amount){
-      const data=getUserData(currentUser);
-      const goal=data.goals.find(g=>g.id===goalId);
-      if(goal){
+window.progressGoal=function(goalId,amount){
+    const data=getUserData(currentUser);
+    const goal=data.goals.find(g=>g.id===goalId);
+    if(goal){
         goal.progress+=amount;
         const today=new Date().toISOString().split("T")[0];
         goal.activityLog[today]=(goal.activityLog[today]||0)+amount;
         addXP(data,amount); renderGoals(); renderXP(); renderHeatmap(); saveLocalUsers();
-      }
     }
+}
 
-    function renderUserSelect(){
-      const select=document.getElementById("user-select");
-      select.innerHTML="";
-      Object.keys(users).forEach(u=>{ const opt=document.createElement("option"); opt.value=u; opt.textContent=u; if(u===currentUser) opt.selected=true; select.appendChild(opt); });
-    }
+function renderUserSelect(){
+    const select=document.getElementById("user-select");
+    select.innerHTML="";
+    Object.keys(users).forEach(u=>{
+        const opt=document.createElement("option");
+        opt.value=u; opt.textContent=u;
+        if(u===currentUser) opt.selected=true;
+        select.appendChild(opt);
+    });
+}
 
-    function renderXP(){
-      const data=getUserData(currentUser);
-      const xpInLevel = data.totalXP%XP_PER_LEVEL;
-      const percent = (xpInLevel/XP_PER_LEVEL)*100;
-      document.getElementById("xp-bar-inner").style.width=percent+"%";
-      document.getElementById("xp-info").innerText=`XP: ${xpInLevel}/${XP_PER_LEVEL} (Level ${data.currentLevel})`;
-      document.getElementById("streak-info").innerText=`🔥 Streak: ${data.streak} Tage`;
-      document.getElementById("rewards").innerHTML=data.rewards.map(r=>`<span class="badge">${r}</span>`).join(" ");
-    }
+function renderXP(){
+    const data=getUserData(currentUser);
+    const xpInLevel=data.totalXP%XP_PER_LEVEL;
+    const percent=(xpInLevel/XP_PER_LEVEL)*100;
+    document.getElementById("xp-bar-inner").style.width=percent+"%";
+    document.getElementById("xp-info").innerText=`XP: ${xpInLevel}/${XP_PER_LEVEL} (Level ${data.currentLevel})`;
+    document.getElementById("streak-info").innerText=`🔥 Streak: ${data.streak} Tage`;
+    document.getElementById("rewards").innerHTML=data.rewards.map(r=>`<span class="badge">${r}</span>`).join(" ");
+}
 
-    function renderGoals(){
-      const data=getUserData(currentUser);
-      const dash=document.getElementById("dashboard");
-      dash.innerHTML="";
-      data.goals.forEach(goal=>{
+function renderGoals(){
+    const data=getUserData(currentUser);
+    const dash=document.getElementById("dashboard");
+    dash.innerHTML="";
+    data.goals.forEach(goal=>{
         const div=document.createElement("div");
         div.className="goal"; div.style.backgroundColor=goal.color;
         div.innerHTML=`
-          <h3>${goal.name} ${goal.emoji}</h3>
-          <p>Progress: ${Math.floor(goal.progress)}/${goal.target}</p>
-          <p>Decay: ${goal.decayRate} pro Tag</p>
-          <button onclick="progressGoal(${goal.id},1)">Minimum</button>
-          <button onclick="progressGoal(${goal.id},2)">Normal</button>
-          <button onclick="progressGoal(${goal.id},5)">Super gut</button><br>
-          <button onclick="updateGoal('${currentUser}',${goal.id},{color:prompt('Farbe','#4caf50')})">🎨 Farbe</button>
-          <button onclick="updateGoal('${currentUser}',${goal.id},{emoji:prompt('Emoji','')})">✨ Emoji</button>
-          <div class="heatmap" id="heatmap-${goal.id}"></div>
+            <h3>${goal.name} ${goal.emoji}</h3>
+            <p>Progress: ${Math.floor(goal.progress)}/${goal.target}</p>
+            <p>Decay: ${goal.decayRate} pro Tag</p>
+            <button onclick="progressGoal(${goal.id},1)">Minimum</button>
+            <button onclick="progressGoal(${goal.id},2)">Normal</button>
+            <button onclick="progressGoal(${goal.id},5)">Super gut</button><br>
+            <button onclick="updateGoal('${currentUser}',${goal.id},{color:prompt('Farbe','#4caf50')})">🎨 Farbe</button>
+            <button onclick="updateGoal('${currentUser}',${goal.id},{emoji:prompt('Emoji','')})">✨ Emoji</button>
+            <div class="heatmap" id="heatmap-${goal.id}"></div>
         `;
         dash.appendChild(div); renderGoalHeatmap(goal);
-      });
-    }
+    });
+}
 
-    function renderHeatmap(){
-      const data=getUserData(currentUser);
-      data.goals.forEach(goal=>renderGoalHeatmap(goal));
-    }
+function renderHeatmap(){
+    const data=getUserData(currentUser);
+    data.goals.forEach(goal=>renderGoalHeatmap(goal));
+}
 
-    function renderGoalHeatmap(goal){
-      const heatmap=document.getElementById(`heatmap-${goal.id}`);
-      if(!heatmap) return;
-      heatmap.innerHTML="";
-      const today=new Date();
-      for(let i=29;i>=0;i--){
+function renderGoalHeatmap(goal){
+    const heatmap=document.getElementById(`heatmap-${goal.id}`);
+    if(!heatmap) return;
+    heatmap.innerHTML="";
+    const today=new Date();
+    for(let i=29;i>=0;i--){
         const d=new Date(today); d.setDate(d.getDate()-i);
         const key=d.toISOString().split("T")[0];
         const count=goal.activityLog[key]||0;
@@ -191,21 +182,21 @@
         div.className="day";
         if(count>0) div.dataset.count=Math.min(count,5);
         heatmap.appendChild(div);
-      }
     }
+}
 
-    function init(){
-      loadLocalUsers();
-      renderUserSelect(); renderGoals(); renderXP(); renderHeatmap();
+function init(){
+    loadLocalUsers();
+    renderUserSelect(); renderGoals(); renderXP(); renderHeatmap();
 
-      document.getElementById("user-select").addEventListener("change", e=>{
+    document.getElementById("user-select").addEventListener("change",e=>{
         currentUser=e.target.value; renderGoals(); renderXP(); renderHeatmap();
-      });
-      document.getElementById("add-user").addEventListener("click",()=>{ const name=prompt("Neuer User:"); if(name) addUser(name); });
-      document.getElementById("add-goal").addEventListener("click",()=>{ const name=prompt("Goal Name:"); if(name) addGoal(currentUser,name); });
-    }
+    });
+    document.getElementById("add-user").addEventListener("click",()=>{ const name=prompt("Neuer User:"); if(name) addUser(name); });
+    document.getElementById("add-goal").addEventListener("click",()=>{ const name=prompt("Goal Name:"); if(name) addGoal(currentUser,name); });
+}
 
-    init();
-  </script>
+init();
+</script>
 </body>
 </html>
